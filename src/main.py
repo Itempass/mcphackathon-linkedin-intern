@@ -1,17 +1,40 @@
-from fastapi import FastAPI, Response, status, BackgroundTasks
+from fastapi import FastAPI, Response, status, BackgroundTasks, Request
 from . import models, services
 from . import background_tasks as tasks
+import httpx
 
 app = FastAPI()
 
-# == DATABASE MCP SERVER ==
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'mcp_servers', 'database_mcp_server'))
-from main import mcp
-app.mount("/mcp", mcp)
+# MCP Reverse Proxy
+@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def mcp_proxy(request: Request, path: str):
+    """Proxy requests to the MCP server running on port 8001"""
+    async with httpx.AsyncClient() as client:
+        # Forward the request to the internal MCP server
+        url = f"http://localhost:8001/mcp/{path}"
+        
+        # Get request body if present
+        body = await request.body()
+        
+        # Forward the request
+        response = await client.request(
+            method=request.method,
+            url=url,
+            headers=dict(request.headers),
+            content=body,
+            params=dict(request.query_params)
+        )
+        
+        # Return the response
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+    
 
 # == GENERAL BACKEND SERVER ==
+
 @app.get("/")
 def read_root():
     return {"status": "ok"}

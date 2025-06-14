@@ -58,7 +58,7 @@ def process_thread_and_create_draft(request: api_models.APISendMessageRequest) -
 
     if not new_api_messages:
         print("SERVICE: No new messages found. No action taken.")
-        return # Or return an existing draft ID if that's desired behavior
+        return 
 
     print(f"SERVICE: Found {len(new_api_messages)} new messages.")
 
@@ -87,11 +87,12 @@ def process_thread_and_create_draft(request: api_models.APISendMessageRequest) -
     print("SERVICE: New messages stored.")
 
     # 4. Generate a new draft using the full, updated conversation history
-    full_thread_history = [
-        msg for msg in MOCK_MESSAGES_DB
-        if msg.thread_name == request.thread_name and msg.type == MessageType.MESSAGE
-    ]
-    # Here you might want to sort them by timestamp if available
+    full_thread_history = sorted(
+        [msg for msg in MOCK_MESSAGES_DB
+         if msg.thread_name == request.thread_name],
+        key=lambda msg: msg.timestamp
+    )
+    
     
     system_prompt = _load_prompt("process_thread_prompt.txt")
     llm_messages = [{"role": "system", "content": system_prompt}]

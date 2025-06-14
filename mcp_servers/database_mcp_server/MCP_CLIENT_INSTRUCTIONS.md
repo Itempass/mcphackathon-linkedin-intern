@@ -17,10 +17,10 @@ The Database MCP Server provides tools for inspecting database structure and ret
    pip install fastmcp
    ```
 
-2. **Environment Variables**: 
+2. **Environment Variable**:
+   Set the `BACKEND_BASE_URL` to your server's address.
    ```bash
-   export BACKEND_BASE_URL="http://localhost"
-   export MCP_DB_SERVERPORT="8080"
+   export BACKEND_BASE_URL="<your_backend_base_url>"
    ```
 
 ## Basic Usage
@@ -31,9 +31,8 @@ import asyncio
 from fastmcp import Client
 
 # Connect to the MCP server
-base_url = os.getenv("BACKEND_BASE_URL", "http://localhost")
-port = os.getenv("MCP_DB_SERVERPORT", "8080")
-client = Client(f"{base_url}:{port}/mcp")
+base_url = os.getenv("BACKEND_BASE_URL")
+client = Client(f"{base_url}/mcp")
 
 async def main():
     async with client:
@@ -94,9 +93,8 @@ import asyncio
 from fastmcp import Client
 
 async def explore_database():
-    base_url = os.getenv("BACKEND_BASE_URL", "http://localhost")
-    port = os.getenv("MCP_DB_SERVERPORT", "8080")
-    client = Client(f"{base_url}:{port}/mcp")
+    base_url = os.getenv("BACKEND_BASE_URL")
+    client = Client(f"{base_url}/mcp")
     
     async with client:
         # Get all tables

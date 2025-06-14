@@ -195,7 +195,7 @@ async def add_message(
     user_id: str,
     message_id: str,
     message_type: MessageType,
-    message_content: str,
+    msg_content: str,
     thread_name: str,
     sender_name: str,
     timestamp: datetime,
@@ -208,7 +208,7 @@ async def add_message(
         user_id: The user ID
         message_id: The ID for the new message
         message_type: The type of the message (MessageType.DRAFT or MessageType.MESSAGE)
-        message_content: The content of the message
+        msg_content: The content of the message
         thread_name: The name of the thread
         sender_name: The name of the sender
         timestamp: The timestamp of the message
@@ -221,7 +221,7 @@ async def add_message(
         message = Message(
             id=message_id,
             user_id=user_id,
-            msg_content=message_content,
+            msg_content=msg_content,
             type=message_type,
             thread_name=thread_name,
             sender_name=sender_name,

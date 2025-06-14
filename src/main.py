@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Response, status, BackgroundTasks, Request
-from . import models, services
+from . import models, app_services
 from . import background_tasks as tasks
 import httpx
 import os
@@ -57,25 +57,13 @@ def process_feedback(request: models.api_models.APIProcessFeedbackRequest, backg
     return {"message": "Feedback processing started in the background"}
 
 @app.post("/reject-draft/", status_code=status.HTTP_200_OK)
-def reject_draft(request: models.api_models.APIRejectDraftRequest):
-    services.delete_draft(request)
+async def reject_draft(request: models.api_models.APIRejectDraftRequest):
+    await app_services.delete_draft(request)
     return {"message": "Draft rejected"}
 
 @app.get("/draft-messages/", response_model=models.api_models.APIDraftMessageResponse)
-def get_draft_messages(user_id: str):
-    internal_drafts = services.get_all_drafts_for_user(user_id)
+async def get_draft_messages(user_id: str):
+    internal_drafts = await app_services.get_all_drafts_for_user(user_id)
     # Map the internal message models to API models for the response
     api_drafts = [draft.to_api_draft_message() for draft in internal_drafts]
-    result = models.api_models.APIDraftMessageResponse(draft_messages=api_drafts)
-    return models.api_models.APIDraftMessageResponse(draft_messages=[
-        {
-            "thread_name": "Arthur Stockman",
-            "draft_message_id": "draft-123",
-            "draft_message_content": "This is a draft message."
-        },
-        {
-            "thread_name": "Lotte Verheyden",
-            "draft_message_id": "draft-456",
-            "draft_message_content": "This is another draft message."
-        }
-    ])
+    return models.api_models.APIDraftMessageResponse(draft_messages=api_drafts)

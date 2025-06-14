@@ -1,3 +1,7 @@
+Use BACKEND_BASE_URL (environment variable) for the endpoints base url (will be ...)
+
+
+
 ## endpoint POST /send-messages/
 request body parameters:
 *user_id: string 

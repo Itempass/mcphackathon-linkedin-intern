@@ -25,12 +25,12 @@ loop
     else toolcall find_similar_messages
         AGENT -> BE: find_similar_messages (input = message_content: string)
         BE -> MCP: find similar messages (input = message_content: string, user_id: string)
-        MCP --> BE: similar messages (array of message_ids? strings?)
+        MCP --> BE: similar messages (array of strings)
         BE --> AGENT: similar messages (array of strings)
     else toolcall semantic_search
         AGENT -> BE: semantic_search (input = search_query: string)
         BE -> MCP: semantic search (input = search_query: string, user_id: string)
-        MCP --> BE: similar messages (array of message_ids? strings?)
+        MCP --> BE: similar messages (array of strings)
         BE --> AGENT: similar messages (array of strings)
     end
 end

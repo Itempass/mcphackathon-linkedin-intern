@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -6,8 +7,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete, update, text, inspect
 from sqlalchemy.engine import Inspector
 
+# Add project root to Python path to import shared models
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
+
 from fastmcp import FastMCP, Context
-from models import Base, Message, Agent, AgentThread, MessageType, AgentMessageType
+from src.models.database_models import Base, Message, Agent, MessageType
 
 # --- Configuration ---
 load_dotenv(override=True)

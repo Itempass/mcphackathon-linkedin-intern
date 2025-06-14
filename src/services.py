@@ -126,6 +126,18 @@ def create_revised_draft_from_feedback(request: api_models.APIProcessFeedbackReq
         print(f"SERVICE: Draft {request.draft_message_id} not found for user {request.user_id}.")
         return
 
+    # Get the agent_id from the original draft as per sequence diagram
+    agent_id = original_draft.agent_id
+    if not agent_id:
+        print(f"SERVICE: No agent_id found for draft {request.draft_message_id}.")
+        return
+
+    # Get the agent context from the DB
+    agent_context = MOCK_AGENTS_DB.get(agent_id)
+    if not agent_context:
+        print(f"SERVICE: Agent context not found for agent_id {agent_id}.")
+        return
+
     # Retrieve the full conversation context from the mock DB, including the draft
     thread_context = [
         msg for msg in MOCK_MESSAGES_DB
@@ -134,38 +146,33 @@ def create_revised_draft_from_feedback(request: api_models.APIProcessFeedbackReq
     # Ensure messages are in chronological order
     thread_context.sort(key=lambda x: x.timestamp)
 
-    # Format messages for the LLM
-    system_prompt = _load_prompt("revise_draft_prompt.txt")
-    llm_messages = [{"role": "system", "content": system_prompt}]
-    for msg in thread_context:
-         llm_messages.append({"role": "user" if msg.sender_name != "Agent" else "assistant", "content": msg.msg_content})
+    # Format messages for the LLM, starting with the existing agent context
+    llm_messages = agent_context.copy()  # Use existing context
     
     # Add the user's new feedback as the final message
     llm_messages.append({"role": "user", "content": f"Here is my feedback on the draft: {request.feedback}"})
     
     revised_content = llm_client.get_llm_completion(llm_messages)
     
-    # --- New Logic based on sequence diagram ---
-    # 1. Store the agent context
-    agent_id = str(uuid.uuid4())
-    MOCK_AGENTS_DB[agent_id] = llm_messages
-    print(f"SERVICE: Stored agent context with id {agent_id}.")
-
-    # 2. Delete the old draft
+    # Delete the old draft
     MOCK_MESSAGES_DB.remove(original_draft)
     print(f"SERVICE: Deleted old draft {original_draft.id}.")
 
-    # 3. Create and store the new draft, linking the agent_id
+    # Create and store the new draft, using the same agent_id
     new_draft = InternalMessage(
         user_id=request.user_id,
         thread_name=original_draft.thread_name,
         sender_name="Agent",
         msg_content=revised_content,
         type=MessageType.DRAFT,
-        agent_id=str(agent_id)
+        agent_id=agent_id  # Reuse the same agent_id
     )
     MOCK_MESSAGES_DB.append(new_draft)
-    print(f"SERVICE: Created new draft {new_draft.id} with agent context.")
+    print(f"SERVICE: Created new draft {new_draft.id} with existing agent context.")
+
+    # Update the agent context in the DB with the new messages
+    MOCK_AGENTS_DB[agent_id] = llm_messages
+    print(f"SERVICE: Updated agent context for agent_id {agent_id}.")
 
 
 def get_all_drafts_for_user(user_id: str) -> List[InternalMessage]:

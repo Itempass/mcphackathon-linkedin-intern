@@ -36,7 +36,7 @@ request body parameters:
 response: 
 - 200 OK
 
-## endpoint GET /draft_messages/
+## endpoint GET /draft-messages/
 request body parameters: 
 *user_id: string 
 

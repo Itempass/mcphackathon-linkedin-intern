@@ -6,13 +6,20 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete, update, text, inspect
 from sqlalchemy.engine import Inspector
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Add project root to Python path to import shared models
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
+print(f"DEBUG: Project root: {project_root}")
+print(f"DEBUG: Python path: {sys.path[:3]}")
 
 from fastmcp import FastMCP, Context
 from src.models.database_models import Base, Message, Agent, MessageType
+from src.services.mysql_service import *
+from src.services.pinecone_service import PineconeService
 
 # --- Configuration ---
 load_dotenv(override=True)
@@ -28,6 +35,9 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 
 # --- FastMCP Application Setup ---
 mcp = FastMCP("Database MCP Server")
+
+# --- Service Initialization ---
+pinecone_svc = PineconeService()
 
 async def get_db_session():
     """Get a database session"""
@@ -113,8 +123,10 @@ async def get_table_structure(table_name: str, user_id: str = None) -> Dict[str,
         return result
 
 @mcp.tool(exclude_args=["user_id"])
+#@mcp.tool()
 async def get_last_added_rows(table_name: str, rows: int = 10, user_id: str = None) -> List[Dict[str, Any]]:
     """Get the last N rows added to a table (ordered by ID or primary key, defaults to 10 rows)"""
+    
     if user_id is None:
         raise ValueError("user_id is required")
     
@@ -176,6 +188,51 @@ async def get_last_added_rows(table_name: str, rows: int = 10, user_id: str = No
             rows_data.append(row_dict)
         
         return rows_data
+
+@mcp.tool(exclude_args=["user_id"])
+async def get_similar_message(message_id: str, user_id: str = None) -> List[Dict[str, Any]]:
+    """
+    Get messages similar to a specific message by using the message content as a query vector
+    
+    Args:
+        message_id: The ID of the message to find similar messages for
+        user_id: The user ID (required for filtering)
+        top_k: Number of similar messages to return (default: 5)
+    
+    Returns:
+        List of similar messages with similarity scores and metadata
+    """
+    top_k = 10
+
+    if user_id is None:
+        raise ValueError("user_id is required")
+    
+    # Get the original message from MySQL
+    original_message = await get_message(user_id, message_id)
+    if original_message is None:
+        raise ValueError(f"Message with ID '{message_id}' not found for user '{user_id}'")
+    
+    # Use the message content as the query for finding similar messages
+    query_content = original_message.msg_content
+    
+    # Query Pinecone for similar messages
+    similar_messages = pinecone_svc.query_messages(user_id, query_content, top_k)
+    print(f"DEBUG: Similar messages: {similar_messages}")
+    # Format the results to include the original message info
+    results = []
+    for msg in similar_messages:
+        # Skip the original message in results (same message_id)
+        if msg.get('message_id') == message_id:
+            continue
+            
+        result = {
+            "message_id": msg.get('message_id'),
+            "message_content": msg.get('msg_content'),
+            "sent or received by user?": msg.get('direction')
+        }
+        results.append(result)
+    
+    return results
 
 # --- Server Execution ---
 if __name__ == "__main__":

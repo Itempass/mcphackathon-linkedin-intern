@@ -24,6 +24,24 @@ class PineconeService:
 
         try:
             pc = Pinecone(api_key=self.api_key)
+            
+            # Check if index exists, create if it doesn't
+            existing_indexes = [index.name for index in pc.list_indexes()]
+            if self.index_name not in existing_indexes:
+                logger.info(f"[PineconeService] Index '{self.index_name}' not found. Creating new index...")
+                pc.create_index(
+                    name=self.index_name,
+                    dimension=1536,  # OpenAI embedding dimension
+                    metric='cosine',
+                    spec={
+                        'serverless': {
+                            'cloud': 'aws',
+                            'region': 'us-east-1'
+                        }
+                    }
+                )
+                logger.info(f"[PineconeService] Created new index '{self.index_name}'.")
+            
             self.index = pc.Index(self.index_name)
             logger.info(f"[PineconeService] Initialized and connected to index '{self.index_name}'.")
             # Log index stats to confirm connection

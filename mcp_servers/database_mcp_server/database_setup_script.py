@@ -20,6 +20,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.insert(0, project_root)
 
 from src.models.database_models import Base, Message, Agent, MessageType
+from src.services.pinecone_service import PineconeService
 
 # Load environment variables
 load_dotenv(override=True)
@@ -128,8 +129,9 @@ async def add_mock_data():
         )
         
         message2 = Message(
-            id=create_message_id("jane_smith", timestamp2, "Working on the database integration."),
-            user_id=create_user_id("jane_smith"),
+            #id=create_message_id("jane_smith", timestamp2, "Working on the database integration."),
+            id="aaaaa",
+            user_id="jane_smith",
             msg_content="Working on the database integration.",
             type=MessageType.MESSAGE,
             thread_name="development",
@@ -139,12 +141,12 @@ async def add_mock_data():
         )
         
         message3 = Message(
-            id=create_message_id("alice_johnson", timestamp3, "This is a draft message for review."),
-            user_id=create_user_id("alice_johnson"),
+            id="bbbbb",
+            user_id="jane_smith",
             msg_content="This is a draft message for review.",
-            type=MessageType.DRAFT,
+            type=MessageType.MESSAGE,
             thread_name="general_chat",
-            sender_name="alice_johnson",
+            sender_name="jane_smith",
             timestamp=timestamp3,
             agent_id=None  # No agent assigned to this message
         )
@@ -184,6 +186,65 @@ async def add_mock_data():
     print("  - 2 Agents")
     print("  - 5 Messages (3 MESSAGE type, 2 DRAFT type)")
 
+async def add_pinecone_data():
+    """Add mock data to Pinecone"""
+    print("Setting up Pinecone with mock data...")
+    
+    try:
+        pinecone_service = PineconeService()
+        
+        # Create the same mock messages that we added to the database
+        timestamp1 = datetime(2024, 6, 14, 10, 30, 0)
+        timestamp2 = datetime(2024, 6, 14, 11, 15, 0)
+        timestamp3 = datetime(2024, 6, 14, 12, 0, 0)
+        timestamp4 = datetime(2024, 6, 14, 13, 30, 0)
+        timestamp5 = datetime(2024, 6, 14, 14, 45, 0)
+        
+        # Upsert each message to Pinecone
+        mock_messages = [
+            {
+                "id": create_message_id("john_doe", timestamp1, "Hello, this is my first message!"),
+                "user_id": "jane_smith",
+                "msg_content": "Hello, this is my first message!"
+            },
+            {
+                "id": "aaaaa",
+                "user_id": "jane_smith",
+                "msg_content": "Working on the database integration."
+            },
+            {
+                "id": create_message_id("alice_johnson", timestamp3, "This is a draft message for review."),
+                "user_id": create_user_id("alice_johnson"),
+                "msg_content": "This is a draft message for review."
+            },
+            {
+                "id": create_message_id("bob_wilson", timestamp4, "Can someone help me with the API documentation?"),
+                "user_id": create_user_id("bob_wilson"),
+                "msg_content": "Can someone help me with the API documentation?"
+            },
+            {
+                "id": create_message_id("carol_davis", timestamp5, "Draft proposal for the new feature."),
+                "user_id": create_user_id("carol_davis"),
+                "msg_content": "Draft proposal for the new feature."
+            }
+        ]
+        
+        for message in mock_messages:
+            pinecone_service.upsert_to_pinecone(
+                user_id=message["user_id"],
+                message_id=message["id"],
+                msg_content=message["msg_content"],
+                direction="received"
+            )
+            print(f"  ✓ Upserted message: {message['id'][:8]}...")
+        
+        print("✅ Pinecone setup completed successfully:")
+        print("  - 5 Messages upserted to vector database")
+        
+    except Exception as e:
+        print(f"❌ Error during Pinecone setup: {e}")
+        raise
+
 async def main():
     """Main setup function"""
     print("🚀 Starting database setup...")
@@ -192,7 +253,10 @@ async def main():
         await drop_tables()
         await create_tables()
         await add_mock_data()
-        print("\n✅ Database setup completed successfully!")
+        await add_pinecone_data()
+        print("\n✅ Complete database setup completed successfully!")
+        print("  - MySQL database tables created and populated")
+        print("  - Pinecone vector database populated")
         
     except Exception as e:
         print(f"\n❌ Error during database setup: {e}")

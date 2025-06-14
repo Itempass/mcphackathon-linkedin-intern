@@ -67,6 +67,25 @@ async def get_all_messages_of_thread(user_id: str, thread_name: str) -> List[Mes
         result = await session.execute(stmt)
         return result.scalars().all()
 
+async def get_message(user_id: str, message_id: str) -> Optional[Message]:
+    """
+    Get a specific message for a user
+    
+    Args:
+        user_id: The user ID
+        message_id: The ID of the message to retrieve
+    
+    Returns:
+        Message object or None if not found
+    """
+    async with AsyncSessionLocal() as session:
+        stmt = select(Message).where(
+            Message.user_id == user_id,
+            Message.id == message_id
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
 async def remove_message(user_id: str, message_id: str) -> bool:
     """
     Remove a message for a specific user

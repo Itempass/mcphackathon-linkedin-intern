@@ -1,0 +1,49 @@
+@startuml
+title Message Object Structure
+
+class Message {
+  +*id: hash of sender_date, timestamp =date&time, content
+  +*user_id: hash of user name
+  +*msg_content: String
+  +*type: MessageType
+  +*thread_name: String
+  +*sender_name: String
+  +?timestamp: DateTime
+  +*?agent_id: UUID
+}
+
+enum MessageType {
+  DRAFT
+  MESSAGE
+}
+
+class Agent {
+  +*id: UUID
+  +*messages: String[]
+}
+
+class AgentThread {
+  +*type: AgentMessageType
+  +*content: String
+}
+
+enum AgentMessageType {
+  system_prompt
+  user_prompt
+  toolcall
+  toolcall_response
+  toolcall_response_error
+  toolcall_response_success
+  toolcall_response_warning
+  toolcall_response_info
+}
+
+Message o-- MessageType : has
+Message o-- MessageStatus : has
+
+legend right
+  * = required
+  ? = optional
+endlegend
+
+@enduml 

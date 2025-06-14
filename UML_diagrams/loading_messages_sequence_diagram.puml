@@ -9,40 +9,44 @@ participant MCP
 
 LI <- FE: sees thread is open
 FE -> FE: Find msgID, sender_name, date, time, thread_name, msg_content for each message in thread
-FE -> BE: Send msg [{...}]
-BE -> DB: Does message already exist?
+FE -> BE: Send list of messages [{...}]
+BE -> DB: Does message already exist? (search by msgID)
 note right: BE gets multiple messages in an array per call. It only needs to start the entire process once for each thread, if there are one or more new messages in that thread. If there are 3 new messages for a single thread, the process runs one time for that thread, not 3.
 alt Doesn't exist yet
-    BE -> DB: convert date + time to timestamp, add msg to DB (type="MESSAGE")
-    BE -> DB: search for existing drafts on thread_id
+    BE -> BE: convert date + time to timestamp, add message to DB (Message structure, type="MESSAGE")
+    BE -> DB: search for existing drafts (Message structure, type="DRAFT") on thread_name of message
     alt draft found
+        BE -> BE: extract agent_id from draft Message
         BE -> DB: remove draft
-        BE -> DB: remove agent
+        BE -> DB: remove agent (key=agent_id)
+    end
 end
-BE -> AGENT: Should I reply? (input = thread in [{}], system_prompt)
+BE -> BE: retrieve system_prompt from DB (key=user_id)
+BE -> AGENT: Should I reply? (input = all messages of thread_name), ordered by timestamp, system_prompt)
 loop 
     alt toolcall suggest_draft
-        AGENT -> BE: suggest_draft (input = draft content)
-        BE -> DB: search for new message in DB
+        AGENT -> BE: suggest_draft (input = draft content: string)
+        BE -> DB: get all messages of thread_name, ordered by timestamp
+        BE -> BE: check if new message in it compared to list of messages used by agent
         alt new message found
             BE -> DB: don't store draft
         else no new message found
-            BE -> DB: add draft message to DB (with msgID, thread_name, msg_content, type="DRAFT", agent_id)
-            BE -> DB: add agent to agents table (key = agent_id, value = messages json)
+            BE -> DB: add agent to agents table (key = agent_id - randomly generated, value = messages json)
+            BE -> DB: add draft message to DB (link agent_id)
         end
     else toolcall end_work
         AGENT -> BE: end_work
         BE -> BE: stop
     else toolcall find_similar_messages
-        AGENT -> BE: find_similar_messages
-        BE -> MCP: find similar messages
-        MCP --> BE: similar messages
-        BE --> AGENT: similar messages
+        AGENT -> BE: find_similar_messages (input = message_content: string)
+        BE -> MCP: find similar messages (input = message_content: string, user_id: string)
+        MCP --> BE: similar messages (array of message_ids? strings?)
+        BE --> AGENT: similar messages (array of strings)
     else toolcall semantic_search
-        AGENT -> BE: semantic_search
-        BE -> MCP: semantic search
-        MCP --> BE: similar messages
-        BE --> AGENT: similar messages
+        AGENT -> BE: semantic_search (input = search_query: string)
+        BE -> MCP: semantic search (input = search_query: string, user_id: string)
+        MCP --> BE: similar messages (array of message_ids? strings?)
+        BE --> AGENT: similar messages (array of strings)
     end
 end
 @enduml

@@ -1,0 +1,5 @@
+1. FE + basic BE + DB MCP
+2. CRM (google sheet) MCP
+3. calenddar MCP (if agent behavior for planning call is not good enough yet)
+
+4. we can also update the system prompt of the user after user feedback

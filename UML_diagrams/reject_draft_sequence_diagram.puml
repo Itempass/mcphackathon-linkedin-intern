@@ -7,7 +7,8 @@ participant AGENT
 participant MCP
 
 LI <- FE: user rejects draft
-FE -> BE: reject draft (draft message: thread id, message id, ..., feedback)
-BE -> DB: remove draft from DB
-BE -> DB: remove agent from agents table
+FE -> BE: reject draft (draft message_id, feedback: string)
+BE -> DB: get agent_id from draft message (by message_id)
+BE -> DB: remove draft from DB (by message_id)
+BE -> DB: remove agent from agents table (by agent_id)
 @enduml

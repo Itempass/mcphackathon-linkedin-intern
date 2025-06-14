@@ -11,7 +11,7 @@ request body parameters:
 }]
 
 response: 
-- 200 OK
+- 202 ACCEPTED
 
 
 ## endpoint POST /process-feedback/
@@ -21,7 +21,7 @@ request body parameters:
 *feedback: string
 
 response: 
-- 200 OK
+- 202 ACCEPTED
 
 
 ## endpoint POST /reject-draft/

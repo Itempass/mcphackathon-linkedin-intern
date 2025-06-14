@@ -10,17 +10,20 @@ participant MCP
 LI <- FE: sees thread is open
 FE -> FE: Find msgID, sender_name, date, time, thread_name, msg_content for each message in thread
 FE -> BE: POST /send-messages/ (list of messages)
-BE -> DB: Does message already exist? (search by msgID)
-note right: BE gets multiple messages in an array per call. It only needs to start the entire process once for each thread, if there are one or more new messages in that thread. If there are 3 new messages for a single thread, the process runs one time for that thread, not 3.
-alt Doesn't exist yet
-    BE -> BE: convert date + time to timestamp, add message to DB (Message structure, type="MESSAGE")
-    BE -> DB: search for existing drafts (Message structure, type="DRAFT") on thread_name of message
-    alt draft found
-        BE -> BE: extract agent_id from draft Message
-        BE -> DB: remove draft
-        BE -> DB: remove agent (key=agent_id)
+BE --> FE: 202 ACCEPTED
+BE -> DB: get all messages of thread_name, ordered by timestamp
+BE -> BE: check if there are new messages received from the endpoint, that are not yet in the database list of messages
+DB --> BE: list of messages
+alt new messages found
+    loop for each new message
+        BE -> BE: convert date + time to timestamp, add message to DB (Message structure, type="MESSAGE")
+        BE -> DB: search for existing drafts (Message structure, type="DRAFT") on thread_name of message
+        alt draft found
+            BE -> BE: extract agent_id from draft Message
+            BE -> DB: remove draft
+            BE -> DB: remove agent (key=agent_id)
+        end
     end
-end
 BE -> BE: retrieve system_prompt from DB (key=user_id)
 BE -> AGENT: Should I reply? (input = all messages of thread_name), ordered by timestamp, system_prompt)
 loop 
@@ -48,5 +51,6 @@ loop
         MCP --> BE: similar messages (array of message_ids? strings?)
         BE --> AGENT: similar messages (array of strings)
     end
+end
 end
 @enduml

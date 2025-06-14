@@ -2,16 +2,16 @@
 title Create Briefing
 
 actor User
-participant "UI" as UI
+participant "LI" as LI
 participant "FE" as FE
 participant "BE" as BE
 participant "DB" as DB
 
-User -> UI: opens linkedin
-UI -> FE: 👁️ notices
+User -> LI: opens linkedin
+LI -> FE: 👁️ notices
 FE -> BE: GET /draft_messages/
 BE -> DB: retrieve messages of type "DRAFT"
 DB --> BE: messages
 BE --> FE: messages
-FE --> UI: display messages
+FE --> LI: display messages
 @enduml

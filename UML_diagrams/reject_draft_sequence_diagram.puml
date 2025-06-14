@@ -11,4 +11,5 @@ FE -> BE: POST /reject-draft/ (user id,draft message id)
 BE -> DB: get agent_id from draft message (by message_id)
 BE -> DB: remove draft from DB (by message_id)
 BE -> DB: remove agent from agents table (by agent_id)
+BE --> FE: 200 OK
 @enduml

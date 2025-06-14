@@ -6,7 +6,6 @@ error handling and connection management.
 
 import os
 from typing import Any, Dict, Optional, List, Union, AsyncGenerator, Tuple
-from enum import Enum
 import logging
 from contextlib import asynccontextmanager
 import uuid
@@ -21,19 +20,10 @@ except ImportError:
     class ClientError(Exception):
         pass
 
+from .types import MCPMessage, ToolCall, ToolCallType, MessageType
+from .agent_integration import AgentToolCallHandler
+
 logger = logging.getLogger(__name__)
-
-class MessageType(Enum):
-    """Message types as shown in the sequence diagrams."""
-    DRAFT = "DRAFT"
-    MESSAGE = "MESSAGE"
-
-class ToolCallType(Enum):
-    """Tool call types as shown in the sequence diagrams."""
-    SUGGEST_DRAFT = "suggest_draft"
-    FIND_SIMILAR_MESSAGES = "find_similar_messages"
-    SEMANTIC_SEARCH = "semantic_search"
-    END_WORK = "end_work"
 
 class MCPError(Exception):
     """Base exception for MCP-related errors."""
@@ -46,57 +36,6 @@ class MCPConnectionError(MCPError):
 class MCPToolError(MCPError):
     """Raised when an MCP tool call fails."""
     pass
-
-class MCPMessage:
-    """Represents a message in the MCP system."""
-    def __init__(
-        self,
-        content: str,
-        msg_type: MessageType,
-        thread_name: str,
-        sender_name: str,
-        user_id: str,
-        agent_id: Optional[str] = None,
-        timestamp: Optional[str] = None
-    ):
-        self.content = content
-        self.msg_type = msg_type
-        self.thread_name = thread_name
-        self.sender_name = sender_name
-        self.user_id = user_id
-        self.agent_id = agent_id
-        self.timestamp = timestamp
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert message to dictionary format."""
-        return {
-            "msg_content": self.content,
-            "type": self.msg_type.value,
-            "thread_name": self.thread_name,
-            "sender_name": self.sender_name,
-            "user_id": self.user_id,
-            "agent_id": self.agent_id,
-            "timestamp": self.timestamp
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MCPMessage':
-        """Create message from dictionary data."""
-        return cls(
-            content=data["msg_content"],
-            msg_type=MessageType(data["type"]),
-            thread_name=data["thread_name"],
-            sender_name=data["sender_name"],
-            user_id=data["user_id"],
-            agent_id=data.get("agent_id"),
-            timestamp=data.get("timestamp")
-        )
-
-class ToolCall:
-    """Represents a tool call from the agent."""
-    def __init__(self, tool_type: ToolCallType, **kwargs):
-        self.tool_type = tool_type
-        self.kwargs = kwargs
 
 class MCPClientWrapper:
     """
@@ -129,6 +68,7 @@ class MCPClientWrapper:
         self._client: Optional[Client] = None
         self._current_agent_id: Optional[str] = None
         self._message_cache: Dict[str, List[MCPMessage]] = {}
+        self._agent_handler = AgentToolCallHandler()
         
     @property
     def client(self) -> Client:
@@ -235,9 +175,11 @@ class MCPClientWrapper:
 
     async def get_next_tool_call(self, messages: List[MCPMessage]) -> ToolCall:
         """Get next tool call from agent based on messages."""
-        # This would integrate with your agent system to get the next tool call
-        # For now, returning a placeholder
-        raise NotImplementedError("Implement this to integrate with your agent system")
+        return await self._agent_handler.get_next_tool_call(messages)
+
+    async def process_feedback(self, messages: List[MCPMessage], feedback: str) -> ToolCall:
+        """Process feedback and get next tool call."""
+        return await self._agent_handler.process_feedback(messages, feedback)
 
     async def store_draft(self, thread_name: str, content: str) -> MCPMessage:
         """Store a draft message."""

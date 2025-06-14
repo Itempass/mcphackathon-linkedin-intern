@@ -22,11 +22,6 @@ class Agent {
   +*messages: String[]
 }
 
-class AgentThread {
-  +*type: AgentMessageType
-  +*content: String
-}
-
 enum AgentMessageType {
   system_prompt
   user_prompt
@@ -39,7 +34,8 @@ enum AgentMessageType {
 }
 
 Message o-- MessageType : has
-Message o-- MessageStatus : has
+Message o-- Agent : has
+Agent o-- AgentMessageType : has
 
 legend right
   * = required

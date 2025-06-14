@@ -18,9 +18,37 @@ The Database MCP Server provides tools for inspecting database structure and ret
    ```
 
 2. **Environment Variable**:
-   Set the `BACKEND_BASE_URL` to your server's address.
+   Set the `BACKEND_BASE_URL` and `MYSQL_DB` environment variables:
    ```bash
    export BACKEND_BASE_URL="<your_backend_base_url>"
+   export MYSQL_DB="mysql://username:password@localhost:3306/mcp_db"
+   ```
+
+## Database Schema
+
+The server manages two main tables:
+
+1. **Messages**
+   ```sql
+   CREATE TABLE messages (
+       id VARCHAR(32) PRIMARY KEY,
+       user_id VARCHAR(32) NOT NULL,
+       msg_content TEXT NOT NULL,
+       type ENUM('DRAFT', 'MESSAGE') NOT NULL,
+       thread_name VARCHAR(255) NOT NULL,
+       sender_name VARCHAR(255) NOT NULL,
+       timestamp DATETIME NOT NULL,
+       agent_id VARCHAR(36)
+   );
+   ```
+
+2. **Agents**
+   ```sql
+   CREATE TABLE agents (
+       id VARCHAR(36) PRIMARY KEY,
+       user_id VARCHAR(32) NOT NULL,
+       messages JSON
+   );
    ```
 
 ## Basic Usage
@@ -102,26 +130,24 @@ async def explore_database():
         tables = eval(tables_result[0].text)
         print(f"Found {len(tables)} tables: {tables}")
         
-        # Explore first table
-        if tables:
-            table_name = tables[0]
-            
-            # Get structure
-            structure = await client.call_tool("get_table_structure", {
-                "table_name": table_name
-            })
-            schema = eval(structure[0].text)
-            print(f"\n{table_name} columns:")
-            for col in schema['columns']:
-                print(f"  - {col['name']}: {col['type']}")
-            
-            # Get recent data
-            recent = await client.call_tool("get_last_added_rows", {
-                "table_name": table_name,
-                "rows": 3
-            })
-            data = eval(recent[0].text)
-            print(f"\nRecent {table_name} data: {len(data)} rows")
+        # Explore messages table
+        structure = await client.call_tool("get_table_structure", {
+            "table_name": "messages"
+        })
+        schema = eval(structure[0].text)
+        print("\nMessages table columns:")
+        for col in schema['columns']:
+            print(f"  - {col['name']}: {col['type']}")
+        
+        # Get recent messages
+        recent = await client.call_tool("get_last_added_rows", {
+            "table_name": "messages",
+            "rows": 3
+        })
+        data = eval(recent[0].text)
+        print(f"\nRecent messages: {len(data)} rows")
+        for msg in data:
+            print(f"  - {msg['sender_name']}: {msg['msg_content'][:50]}...")
 
 if __name__ == "__main__":
     asyncio.run(explore_database())
@@ -146,5 +172,7 @@ async with client:
 - **User Isolation**: Data is automatically filtered by user when applicable
 - **Data Format**: All responses are returned as text that can be parsed with `eval()`
 - **Connection**: Always use `async with client:` for proper connection management
+- **Message IDs**: Generated as SHA-256 hash of sender, timestamp, and content
+- **Agent IDs**: Generated as UUIDs
 
 For more FastMCP information, see: https://gofastmcp.com/clients/client 

@@ -2,11 +2,7 @@
 
 from enum import Enum
 from typing import Optional, Dict, Any
-
-class MessageType(Enum):
-    """Message types as shown in the sequence diagrams."""
-    DRAFT = "DRAFT"
-    MESSAGE = "MESSAGE"
+from src.models.database_models import MessageType
 
 class ToolCallType(Enum):
     """Tool call types as shown in the sequence diagrams."""

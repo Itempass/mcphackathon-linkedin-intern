@@ -6,7 +6,8 @@ import json
 from typing import List, Dict
 
 from src.agent_integration import AgentToolCallHandler
-from src.types import MCPMessage, MessageType, ToolCallType, ToolCall
+from src.types import MCPMessage, ToolCallType, ToolCall
+from src.models.database_models import MessageType
 
 @pytest.fixture
 def mock_prompts():

@@ -14,13 +14,13 @@ with patch.dict('sys.modules', {'fastmcp': fastmcp_mock}):
     from src.mcp_client import (
         MCPClientWrapper,
         MCPMessage,
-        MessageType,
         ToolCallType,
         ToolCall,
         MCPError,
         MCPConnectionError,
         MCPToolError,
     )
+    from src.models.database_models import MessageType
 
 @pytest.fixture
 def mock_fastmcp_client():

@@ -20,7 +20,8 @@ except ImportError:
     class ClientError(Exception):
         pass
 
-from .types import MCPMessage, ToolCall, ToolCallType, MessageType
+from .types import MCPMessage, ToolCall, ToolCallType
+from src.models.database_models import MessageType
 from .agent_integration import AgentToolCallHandler
 
 logger = logging.getLogger(__name__)

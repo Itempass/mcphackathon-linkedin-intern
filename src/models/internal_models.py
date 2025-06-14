@@ -1,14 +1,10 @@
 # This file will hold internal data models, such as SQLAlchemy ORM classes. 
 
 from pydantic import BaseModel, Field
-from enum import Enum
 from typing import Optional
 from datetime import datetime
 import uuid
-
-class MessageType(str, Enum):
-    DRAFT = "DRAFT"
-    MESSAGE = "MESSAGE"
+from src.models.database_models import MessageType
 
 class InternalMessage(BaseModel):
     """

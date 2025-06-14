@@ -36,15 +36,13 @@ class Message(Base):
     # agent_id: UUID (optional)
     agent_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("agents.id"), nullable=True)
 
-    # Relationship to Agent
-    agent: Mapped[Optional["Agent"]] = relationship(back_populates="messages")
-
 # 4. Define the Agent model
 class Agent(Base):
     __tablename__ = "agents"
 
     # id: UUID
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    
-    # Relationship to Messages (the messages field from UML is represented as a relationship)
-    messages: Mapped[list["Message"]] = relationship(back_populates="agent") 
+    # user_id: hash of user name
+    user_id: Mapped[str] = mapped_column(String(255))
+    # messages: JSON array of LLM conversation messages
+    messages: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Store JSON as text 

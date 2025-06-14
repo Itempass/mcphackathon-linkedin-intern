@@ -17,7 +17,6 @@ COPY mcp_servers/database_mcp_server/requirements.txt ./mcp_servers/database_mcp
 
 # Install all dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir -r mcp_servers/database_mcp_server/requirements.txt
 
 # Copy the entire project
 COPY . .

@@ -63,4 +63,16 @@ def get_draft_messages(user_id: str):
     internal_drafts = services.get_all_drafts_for_user(user_id)
     # Map the internal message models to API models for the response
     api_drafts = [draft.to_api_draft_message() for draft in internal_drafts]
-    return models.api_models.APIDraftMessageResponse(draft_messages=api_drafts)
+    result = models.api_models.APIDraftMessageResponse(draft_messages=api_drafts)
+    return models.api_models.APIDraftMessageResponse(draft_messages=[
+        {
+            "thread_name": "Arthur Stockman",
+            "draft_message_id": "draft-123",
+            "draft_message_content": "This is a draft message."
+        },
+        {
+            "thread_name": "Lotte Verheyden",
+            "draft_message_id": "draft-456",
+            "draft_message_content": "This is another draft message."
+        }
+    ])

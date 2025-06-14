@@ -45,6 +45,8 @@ class Agent(Base):
 
     # id: UUID
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    # user_id: hash of user name
+    user_id: Mapped[str] = mapped_column(String(255))
     
     # Relationship to Messages (the messages field from UML is represented as a relationship)
     messages: Mapped[list["Message"]] = relationship(back_populates="agent") 

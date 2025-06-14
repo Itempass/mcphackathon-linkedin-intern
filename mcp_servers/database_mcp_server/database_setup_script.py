@@ -5,15 +5,21 @@ Creates tables and adds mock data for testing
 """
 
 import os
+import sys
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 import hashlib
 import uuid
 
-from models import Base, Message, Agent, AgentThread, MessageType, AgentMessageType
+# Add project root to Python path to import shared models
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
+
+from src.models.database_models import Base, Message, Agent, MessageType
 
 # Load environment variables
 load_dotenv(override=True)
@@ -37,6 +43,26 @@ def create_message_id(sender_name: str, timestamp: datetime, content: str) -> st
 def create_user_id(user_name: str) -> str:
     """Create a hash ID for user based on username"""
     return hashlib.sha256(user_name.encode()).hexdigest()[:32]
+
+async def drop_tables():
+    """Drop all existing database tables"""
+    print("Dropping existing database tables...")
+    async with engine.begin() as conn:
+        # Disable foreign key checks to allow dropping tables with constraints
+        await conn.execute(text("SET FOREIGN_KEY_CHECKS = 0"))
+        
+        # Get all table names and drop them
+        result = await conn.execute(text("SHOW TABLES"))
+        tables = result.fetchall()
+        
+        for (table_name,) in tables:
+            print(f"  Dropping table: {table_name}")
+            await conn.execute(text(f"DROP TABLE IF EXISTS `{table_name}`"))
+        
+        # Re-enable foreign key checks
+        await conn.execute(text("SET FOREIGN_KEY_CHECKS = 1"))
+        
+    print("✅ All existing tables wiped successfully")
 
 async def create_tables():
     """Create all database tables"""
@@ -64,6 +90,8 @@ async def add_mock_data():
         timestamp1 = datetime(2024, 6, 14, 10, 30, 0)
         timestamp2 = datetime(2024, 6, 14, 11, 15, 0)
         timestamp3 = datetime(2024, 6, 14, 12, 0, 0)
+        timestamp4 = datetime(2024, 6, 14, 13, 30, 0)
+        timestamp5 = datetime(2024, 6, 14, 14, 45, 0)
         
         message1 = Message(
             id=create_message_id("john_doe", timestamp1, "Hello, this is my first message!"),
@@ -98,46 +126,47 @@ async def add_mock_data():
             agent_id=None  # No agent assigned to this message
         )
         
-        session.add(message1)
-        session.add(message2)
-        session.add(message3)
-        
-        # Create mock agent threads
-        thread1 = AgentThread(
-            type=AgentMessageType.system_prompt,
-            content="You are a helpful assistant specialized in database operations.",
+        message4 = Message(
+            id=create_message_id("bob_wilson", timestamp4, "Can someone help me with the API documentation?"),
+            user_id=create_user_id("bob_wilson"),
+            msg_content="Can someone help me with the API documentation?",
+            type=MessageType.MESSAGE,
+            thread_name="support",
+            sender_name="bob_wilson",
+            timestamp=timestamp4,
             agent_id=agent1_id
         )
         
-        thread2 = AgentThread(
-            type=AgentMessageType.user_prompt,
-            content="Please help me understand the database schema.",
-            agent_id=agent1_id
-        )
-        
-        thread3 = AgentThread(
-            type=AgentMessageType.toolcall_response_success,
-            content="Database query executed successfully. Found 3 matching records.",
+        message5 = Message(
+            id=create_message_id("carol_davis", timestamp5, "Draft proposal for the new feature."),
+            user_id=create_user_id("carol_davis"),
+            msg_content="Draft proposal for the new feature.",
+            type=MessageType.DRAFT,
+            thread_name="development",
+            sender_name="carol_davis",
+            timestamp=timestamp5,
             agent_id=agent2_id
         )
         
-        session.add(thread1)
-        session.add(thread2)
-        session.add(thread3)
+        session.add(message1)
+        session.add(message2)
+        session.add(message3)
+        session.add(message4)
+        session.add(message5)
         
         # Commit all changes
         await session.commit()
         
     print("✅ Mock data added successfully:")
     print("  - 2 Agents")
-    print("  - 3 Messages (2 MESSAGE type, 1 DRAFT type)")
-    print("  - 3 Agent Threads")
+    print("  - 5 Messages (3 MESSAGE type, 2 DRAFT type)")
 
 async def main():
     """Main setup function"""
     print("🚀 Starting database setup...")
     
     try:
+        await drop_tables()
         await create_tables()
         await add_mock_data()
         print("\n✅ Database setup completed successfully!")

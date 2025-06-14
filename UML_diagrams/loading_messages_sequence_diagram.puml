@@ -9,7 +9,7 @@ participant MCP
 
 LI <- FE: sees thread is open
 FE -> FE: Find msgID, sender_name, date, time, thread_name, msg_content for each message in thread
-FE -> BE: Send list of messages [{...}]
+FE -> BE: POST /send-messages/ (list of messages)
 BE -> DB: Does message already exist? (search by msgID)
 note right: BE gets multiple messages in an array per call. It only needs to start the entire process once for each thread, if there are one or more new messages in that thread. If there are 3 new messages for a single thread, the process runs one time for that thread, not 3.
 alt Doesn't exist yet

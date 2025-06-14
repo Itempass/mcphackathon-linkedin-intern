@@ -7,7 +7,7 @@ participant AGENT
 participant MCP
 
 LI <- FE: gives feedback on draft, presses button
-FE -> BE: process_feedback (draft message_id, feedback: string)
+FE -> BE: POST /process-feedback/ (user id, draft message_id, feedback)
 BE -> DB: get agent_id from draft message (by message_id)
 BE -> AGENT: process feedback (input = all messages of thread_name) ordered by timestamp, feedback: string)
 loop 

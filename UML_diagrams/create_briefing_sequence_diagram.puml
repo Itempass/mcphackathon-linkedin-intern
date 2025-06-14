@@ -9,7 +9,7 @@ participant "DB" as DB
 
 User -> UI: opens linkedin
 UI -> FE: 👁️ notices
-FE -> BE: retrieve_briefing
+FE -> BE: GET /draft_messages/
 BE -> DB: retrieve messages of type "DRAFT"
 DB --> BE: messages
 BE --> FE: messages

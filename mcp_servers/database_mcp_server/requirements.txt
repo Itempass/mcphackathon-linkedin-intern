@@ -1,0 +1,5 @@
+fastmcp
+SQLAlchemy
+aiomysql
+python-dotenv 
+greenlet

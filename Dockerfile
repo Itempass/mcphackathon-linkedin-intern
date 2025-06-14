@@ -22,24 +22,16 @@ RUN pip install --no-cache-dir -r mcp_servers/database_mcp_server/requirements.t
 # Copy the entire project
 COPY . .
 
-# Create a startup script that can run different services
+# Create a startup script that runs both services in parallel
 RUN echo '#!/bin/bash\n\
-case "$1" in\n\
-  "main")\n\
-    echo "Starting main FastAPI backend..."\n\
-    cd /app && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}\n\
-    ;;\n\
-  "db-mcp")\n\
-    echo "Starting Database MCP Server..."\n\
-    cd /app/mcp_servers/database_mcp_server && python main.py\n\
-    ;;\n\
-  *)\n\
-    echo "Usage: $0 {main|db-mcp}"\n\
-    echo "  main    - Start the main FastAPI backend"\n\
-    echo "  db-mcp  - Start the Database MCP Server"\n\
-    exit 1\n\
-    ;;\n\
-esac' > /app/start.sh && chmod +x /app/start.sh
+echo "Starting Database MCP Server in background..."\n\
+cd /app/mcp_servers/database_mcp_server && python main.py &\n\
+\n\
+echo "Starting main FastAPI backend..."\n\
+cd /app && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000} &\n\
+\n\
+# Wait for all background processes\n\
+wait' > /app/start.sh && chmod +x /app/start.sh
 
 # Set environment variables with defaults
 ENV PORT=8000
@@ -49,5 +41,5 @@ ENV BACKEND_BASE_URL=http://localhost
 # Expose both ports
 EXPOSE 8000 8001
 
-# Default command shows usage
+# Start both services
 CMD ["/app/start.sh"] 

@@ -76,12 +76,35 @@ async def add_mock_data():
     print("Adding mock data...")
     
     async with AsyncSessionLocal() as session:
-        # Create mock agents
+        # Create mock agents with LLM conversation messages
         agent1_id = str(uuid.uuid4())
         agent2_id = str(uuid.uuid4())
         
-        agent1 = Agent(id=agent1_id, user_id=create_user_id("system"))
-        agent2 = Agent(id=agent2_id, user_id=create_user_id("system"))
+        # Sample LLM conversation for agent1
+        agent1_messages = [
+            {"role": "system", "content": "You are a helpful coding assistant."},
+            {"role": "user", "content": "Help me debug this Python code."},
+            {"role": "assistant", "content": "I'd be happy to help! Please share your code and I'll take a look."}
+        ]
+        
+        # Sample LLM conversation for agent2
+        agent2_messages = [
+            {"role": "system", "content": "You are a database expert."},
+            {"role": "user", "content": "How do I optimize this SQL query?"},
+            {"role": "assistant", "content": "Let me analyze your query and suggest some optimizations."}
+        ]
+        
+        import json
+        agent1 = Agent(
+            id=agent1_id, 
+            user_id=create_user_id("system"),
+            messages=json.dumps(agent1_messages)
+        )
+        agent2 = Agent(
+            id=agent2_id, 
+            user_id=create_user_id("system"),
+            messages=json.dumps(agent2_messages)
+        )
         
         session.add(agent1)
         session.add(agent2)

@@ -107,37 +107,66 @@ async def remove_agent(user_id: str, agent_id: str) -> bool:
         await session.commit()
         return result.rowcount > 0
 
-async def add_agent(user_id: str, agent_id: str, messages_array: Optional[List[str]] = None) -> Agent:
+async def get_agent(user_id: str, agent_id: str) -> Optional[Agent]:
     """
-    Add a new agent for a user
+    Get an agent for a user (includes messages)
     
     Args:
         user_id: The user ID
-        agent_id: The ID for the new agent
-        messages_array: Optional list of message IDs to associate with the agent
+        agent_id: The agent ID
     
     Returns:
-        The created Agent object
+        Agent object or None if not found
     """
     async with AsyncSessionLocal() as session:
-        # Create the agent
-        agent = Agent(
-            id=agent_id,
-            user_id=user_id
+        stmt = select(Agent).where(
+            Agent.user_id == user_id,
+            Agent.id == agent_id
         )
-        session.add(agent)
-        
-        # If messages_array is provided, update those messages to reference this agent
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+async def upsert_agent(user_id: str, agent_id: str, messages_array: Optional[List[dict]] = None) -> Agent:
+    """
+    Insert or update an agent for a user (overwrites if exists)
+    
+    Args:
+        user_id: The user ID
+        agent_id: The ID for the agent
+        messages_array: Optional list of LLM conversation messages in format:
+                       [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, ...]
+    
+    Returns:
+        The created/updated Agent object
+    """
+    import json
+    
+    async with AsyncSessionLocal() as session:
+        # Convert messages_array to JSON string if provided
+        messages_json = None
         if messages_array:
-            for message_id in messages_array:
-                stmt = select(Message).where(
-                    Message.id == message_id,
-                    Message.user_id == user_id
-                )
-                result = await session.execute(stmt)
-                message = result.scalar_one_or_none()
-                if message:
-                    message.agent_id = agent_id
+            messages_json = json.dumps(messages_array)
+        
+        # Check if agent exists
+        stmt = select(Agent).where(
+            Agent.user_id == user_id,
+            Agent.id == agent_id
+        )
+        result = await session.execute(stmt)
+        existing_agent = result.scalar_one_or_none()
+        
+        if existing_agent:
+            # Update existing agent
+            existing_agent.messages = messages_json
+            agent = existing_agent
+        else:
+            # Create new agent
+            agent = Agent(
+                id=agent_id,
+                user_id=user_id,
+                messages=messages_json
+            )
+            session.add(agent)
         
         await session.commit()
         await session.refresh(agent)
@@ -191,6 +220,7 @@ def create_message_id(sender_name: str, timestamp: datetime, content: str) -> st
     """Create a hash ID for message based on sender, timestamp, and content"""
     data = f"{sender_name}_{timestamp.isoformat()}_{content}"
     return hashlib.sha256(data.encode()).hexdigest()[:32]
+
 
 # Close database connection
 async def close_connection():

@@ -179,7 +179,7 @@ async def get_last_added_rows(table_name: str, rows: int = 10, user_id: str = No
 
 # --- Server Execution ---
 if __name__ == "__main__":
-    host = os.environ.get("0.0.0.0")
+    host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_DB_SERVERPORT"))
     
     print(f"🚀 Starting FastMCP Database Server on http://{host}:{port}/mcp")

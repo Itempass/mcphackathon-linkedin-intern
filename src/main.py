@@ -10,7 +10,10 @@ app = FastAPI()
 @app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def mcp_proxy(request: Request, path: str):
     """Proxy requests to the MCP server running on port specified by MCP_DB_SERVERPORT env var"""
-    async with httpx.AsyncClient() as client:
+    # Configure timeout for MCP server requests (30 seconds total, 10 seconds connect)
+    timeout = httpx.Timeout(30.0, connect=10.0)
+    
+    async with httpx.AsyncClient(timeout=timeout) as client:
         # Get MCP server port from environment variable
         mcp_port = os.getenv("MCP_DB_SERVERPORT")
         

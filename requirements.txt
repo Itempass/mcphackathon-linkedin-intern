@@ -5,3 +5,5 @@ pytest
 python-dotenv
 openai
 httpx 
+pinecone
+openai

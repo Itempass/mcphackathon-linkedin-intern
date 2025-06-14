@@ -1,0 +1,35 @@
+@startuml
+actor LI
+participant FE
+participant BE
+participant DB as "DB(SQL)"
+participant AGENT
+participant MCP
+
+LI <- FE: gives feedback on draft, presses button
+FE -> BE: process_feedback (draft message: thread id, message id, ..., feedback)
+BE -> AGENT: process feedback (input = draft content, feedback)
+loop 
+    alt toolcall suggest_draft
+        AGENT -> BE: suggest_draft (input = draft content)
+        BE -> DB: search for new message in DB
+        alt new message found
+            BE -> DB: don't store draft
+        else no new message found
+            BE -> DB: remove any existing drafts on thread_id
+            BE -> DB: add draft message to DB (with msgID, thread_name, msg_content, type="DRAFT", agent_id)
+            BE -> DB: add agent to agents table (key = agent_id, value = messages json)
+        end
+    else toolcall find_similar_messages
+        AGENT -> BE: find_similar_messages
+        BE -> MCP: find similar messages
+        MCP --> BE: similar messages
+        BE --> AGENT: similar messages
+    else toolcall semantic_search
+        AGENT -> BE: semantic_search
+        BE -> MCP: semantic search
+        MCP --> BE: similar messages
+        BE --> AGENT: similar messages
+    end
+end
+@enduml

@@ -1,0 +1,16 @@
+@startuml
+actor User
+participant "UI" as UI
+participant "FE" as FE
+participant "BE" as BE
+participant "DB" as DB
+
+User -> UI: opens linkedin
+UI -> FE: 👁️ notices
+FE -> BE: retrieve_briefing
+BE -> DB: retrieve messages of type "DRAFT"
+DB --> BE: drafts
+BE -> DB: retrieve name of threads
+DB --> BE: thread_names
+BE --> FE: drafts
+@enduml

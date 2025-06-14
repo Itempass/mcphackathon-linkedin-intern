@@ -1,0 +1,13 @@
+@startuml
+actor LI
+participant FE
+participant BE
+participant DB as "DB(SQL)"
+participant AGENT
+participant MCP
+
+LI <- FE: user rejects draft
+FE -> BE: reject draft (draft message: thread id, message id, ..., feedback)
+BE -> DB: remove draft from DB
+BE -> DB: remove agent from agents table
+@enduml

@@ -4,6 +4,14 @@ from . import background_tasks as tasks
 
 app = FastAPI()
 
+# == DATABASE MCP SERVER ==
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'mcp_servers', 'database_mcp_server'))
+from main import mcp
+app.mount("/mcp", mcp)
+
+# == GENERAL BACKEND SERVER ==
 @app.get("/")
 def read_root():
     return {"status": "ok"}

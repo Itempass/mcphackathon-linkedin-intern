@@ -22,16 +22,10 @@ RUN pip install --no-cache-dir -r mcp_servers/database_mcp_server/requirements.t
 # Copy the entire project
 COPY . .
 
-# Create a startup script that runs both services on same port
+# Create a startup script that runs the combined app
 RUN echo '#!/bin/bash\n\
-echo "Starting Database MCP Server on port 8000/mcp..."\n\
-cd /app/mcp_servers/database_mcp_server && MCP_DB_SERVERPORT=8000 python main.py &\n\
-\n\
-echo "Starting main FastAPI backend on port 8000..."\n\
-cd /app && uvicorn src.main:app --host 0.0.0.0 --port 8000 &\n\
-\n\
-# Wait for all background processes\n\
-wait' > /app/start.sh && chmod +x /app/start.sh
+echo "Starting combined FastAPI + MCP server on port 8000..."\n\
+cd /app && uvicorn src.main:app --host 0.0.0.0 --port 8000' > /app/start.sh && chmod +x /app/start.sh
 
 # Set environment variables with defaults
 ENV PORT=8000

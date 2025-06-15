@@ -30,15 +30,12 @@ def get_worksheet():
 # --- Tools ---
 
 @mcp.tool(exclude_args=["user_id"])
-async def read_sheet(user_id: str=None, **kwargs) -> str:
+async def read_sheet(user_id: str=None) -> str:
     """
     Reads the entire content of the Google Sheet and returns it as a markdown table.
     Each cell in the markdown table is prefixed with its cell ID (e.g., [A1]).
     """
     try:
-        if kwargs:
-            print(f"Warning: read_sheet received unexpected arguments, but will ignore them: {kwargs}")
-        
         worksheet = get_worksheet()
         # The underlying function is synchronous, but FastMCP can handle it.
         return sheet_to_markdown(worksheet)

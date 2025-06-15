@@ -94,7 +94,7 @@ class GenericMCPAgent:
                             "client": client  # Associate tool with its client
                         })
             except Exception as e:
-                logger.error(f"Failed to discover tools for client {client.server_url}: {e}")
+                logger.error(f"Failed to discover tools for client {client}: {e}")
 
         self.tools = all_tools
         logger.info(f"Tool discovery complete: {len(self.tools)} tools found across {len(self.clients)} clients.")

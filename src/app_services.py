@@ -64,14 +64,15 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
     
     # Construct a rich, conversational prompt for the agent
     history_str = "\n".join([f"- {msg.sender_name}: {msg.msg_content}" for msg in thread_messages if msg.type == MessageType.MESSAGE])
+    system_prompt = open("src/prompts/process_thread_prompt.txt").read()
     messages = [
         {
             "role": "system", 
-            "content": "You are an expert assistant. Your primary goal is to create a draft reply to a linkedin chat conversation. Use the toolcall suggest_draft for that."
+            "content": system_prompt
         },
         {
             "role": "user",
-            "content": f"""A new message has arrived in the thread '{request.thread_name}'. Please generate a helpful draft reply.
+            "content": f"""A new message has arrived in my message thread with '{request.thread_name}'. Please generate a helpful draft reply.
 
 Here is the conversation history so far:
 ---

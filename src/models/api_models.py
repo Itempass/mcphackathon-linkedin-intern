@@ -16,7 +16,6 @@ class APISendMessageRequest(BaseModel):
 
 class APIProcessFeedbackRequest(BaseModel):
     user_id: str
-    thread_name: str
     draft_message_id: str
     feedback: str
 

@@ -253,7 +253,7 @@ class GenericMCPAgent:
         
         try:
             response = self.llm_client.chat.completions.create(
-                model="anthropic/claude-3.5-sonnet",
+                model="anthropic/claude-3.7-sonnet:thinking",
                 messages=messages,
                 tools=llm_tools,
                 tool_choice="auto",

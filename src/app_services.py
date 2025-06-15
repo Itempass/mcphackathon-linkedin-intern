@@ -119,9 +119,14 @@ Analyze the conversation and suggest a suitable draft."""
             timestamp=draft_timestamp,
             agent_id=agent_id
         )
+        
+        # Save the agent information with conversation history
+        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
 
         print(f"SERVICE: Created new draft {draft_id} for thread {request.thread_name}.")
         return draft_id
+    # Save the agent information with conversation history
+    await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
     
     print("SERVICE: Agent did not produce a draft. No new draft created.")
     return None
@@ -211,6 +216,9 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
             timestamp=draft_timestamp,
             agent_id=agent_id
         )
+        
+        # Save the agent information with conversation history
+        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
 
         print(f"SERVICE: Created revised draft {draft_id} with agent {agent_id}")
         return draft_id

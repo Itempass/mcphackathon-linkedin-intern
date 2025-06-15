@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y \
 
 # Copy all requirements files first for better caching
 COPY requirements.txt .
-COPY mcp_servers/database_mcp_server/requirements.txt ./mcp_servers/database_mcp_server/
 
 # Install all dependencies
 RUN pip install --no-cache-dir -r requirements.txt

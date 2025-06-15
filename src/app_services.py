@@ -81,7 +81,7 @@ Analyze the conversation and suggest a suitable draft."""
         }
     ]
     
-    agent_results, conversation_history = await run_intelligent_agent(
+    conversation_history = await run_intelligent_agent(
         server_url_or_path=f"{os.getenv('BACKEND_BASE_URL')}/mcp",
         user_id=request.user_id,
         agent_id=agent_id,
@@ -175,7 +175,7 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
         {"role": "user", "content": f"Please revise your previous draft based on the following feedback: '{request.feedback}'. Provide a new draft using the `suggest_draft` tool."}
     ]
     
-    agent_results, conversation_history = await run_intelligent_agent(
+    conversation_history = await run_intelligent_agent(
         server_url_or_path=f"{os.getenv('BACKEND_BASE_URL')}/mcp",
         user_id=request.user_id,
         agent_id=agent_id,

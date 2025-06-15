@@ -264,7 +264,7 @@ class GenericMCPAgent:
             logger.error(f"LLM call failed: {e}")
             return {"action": "call_tool", "tool": self.tools[0]["name"], "arguments": {}}
     
-    async def run_intelligent_agent(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> Tuple[List[str], List[Dict[str, Any]]]:
+    async def run_intelligent_agent(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> List[Dict[str, Any]]:
         """
         Run the AI agent with intelligent decision-making.
         
@@ -273,12 +273,10 @@ class GenericMCPAgent:
             max_iterations: Maximum number of tool calls to make
             
         Returns:
-            A tuple containing:
-            - List of results from tool executions (strings for logging/display)
-            - The final conversation history (list of message dicts)
+            The final conversation history (list of message dicts)
         """
         if not self.tools:
-            return ["No tools available"], messages
+            return messages
         
         if not messages:
             raise ValueError("The 'messages' list cannot be empty.")
@@ -289,8 +287,6 @@ class GenericMCPAgent:
         # We make a copy to avoid modifying the caller's list.
         current_messages = list(messages)
         
-        results = []
-        
         for iteration in range(max_iterations):
             try:
                 # Get LLM decision
@@ -299,13 +295,12 @@ class GenericMCPAgent:
                 if decision.get("action") == "complete":
                     summary = decision.get('summary', 'No summary provided.')
                     logger.info(f"Agent completed task with summary: {summary}")
-                    results.append(f"✓ Agent Finished: {summary}")
                     break
                 
                 elif decision.get("action") == "suggest_draft":
                     draft = decision.get('draft', 'No draft content.')
                     logger.info(f"Agent suggested a draft: {draft}")
-                    results.append(f"✓ Agent Suggested Draft: {draft}")
+                    # The tool call will be added to the history below, so we can just break
                     break
                 
                 elif decision.get("action") == "call_tool":
@@ -329,7 +324,6 @@ class GenericMCPAgent:
                         
                         # Execute the tool
                         result = await self.execute_tool(tool_name, tool_args)
-                        results.append(result)
                         
                         # Add tool execution result to history for the next turn
                         current_messages.append({
@@ -355,8 +349,8 @@ class GenericMCPAgent:
                 logger.error(f"Agent loop failed: {e}")
                 break
         
-        logger.info(f"Intelligent exploration completed after {len(results)} actions")
-        return results, current_messages
+        logger.info(f"Intelligent exploration completed")
+        return current_messages
 
 
 # Convenience function for simple usage
@@ -367,7 +361,7 @@ async def run_intelligent_agent(
     messages: List[Dict[str, Any]],
     max_iterations: int = 5,
     openrouter_api_key: Optional[str] = None
-) -> Tuple[List[str], List[Dict[str, Any]]]:
+) -> List[Dict[str, Any]]:
     """
     Run an intelligent MCP agent with AI decision-making.
     
@@ -380,9 +374,7 @@ async def run_intelligent_agent(
         openrouter_api_key: OpenRouter API key (optional, uses OPENROUTER_API_KEY env var)
         
     Returns:
-        A tuple containing:
-        - List of results from tool executions (strings for logging/display)
-        - The final conversation history (list of message dicts)
+        The final conversation history (list of message dicts)
     """
     async with GenericMCPAgent(server_url_or_path, user_id, agent_id, openrouter_api_key) as agent:
         return await agent.run_intelligent_agent(messages, max_iterations)
@@ -398,7 +390,7 @@ async def main():
     ]
     
     # Run the agent - it will intelligently explore whatever tools are available
-    results, conversation = await run_intelligent_agent(
+    final_conversation = await run_intelligent_agent(
         server_url_or_path="http://localhost:8000/mcp", 
         user_id="user123",
         agent_id="agent456", 
@@ -406,12 +398,8 @@ async def main():
         max_iterations=3
     )
     
-    # Process results
-    for result in results:
-        print(result)
-    
     print("\n--- Final Conversation ---")
-    print(json.dumps(conversation, indent=2))
+    print(json.dumps(final_conversation, indent=2))
 
 
 if __name__ == "__main__":

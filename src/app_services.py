@@ -10,6 +10,7 @@ import os
 
 from src.models import api_models
 from src.models.database_models import MessageType
+from src.models.internal_models import InternalMessage
 from src.services.mysql_service import *
 from src.agent import run_intelligent_agent
 
@@ -131,12 +132,28 @@ Analyze the conversation and suggest a suitable draft."""
     print("SERVICE: Agent did not produce a draft. No new draft created.")
     return None
 
-async def get_all_drafts_for_user(user_id: str) -> List[Any]:
+async def get_all_drafts_for_user(user_id: str) -> List[InternalMessage]:
     """
     Service to retrieve all messages of type=DRAFT for a given user.
     """
     print(f"SERVICE: Fetching drafts for user {user_id}")
-    return await get_all_messages_of_type(user_id, MessageType.DRAFT)
+    db_drafts = await get_all_messages_of_type(user_id, MessageType.DRAFT)
+    
+    # Convert database models to internal Pydantic models
+    internal_drafts = [
+        InternalMessage(
+            id=draft.id,
+            user_id=draft.user_id,
+            thread_name=draft.thread_name,
+            sender_name=draft.sender_name,
+            msg_content=draft.msg_content,
+            type=draft.type,
+            timestamp=draft.timestamp,
+            agent_id=uuid.UUID(draft.agent_id) if draft.agent_id else None
+        ) for draft in db_drafts
+    ]
+    
+    return internal_drafts
 
 async def delete_draft(request: api_models.APIRejectDraftRequest):
     """

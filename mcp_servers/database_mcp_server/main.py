@@ -47,33 +47,49 @@ async def get_db_session():
 # --- Database Inspection Tools ---
 
 @mcp.tool(exclude_args=["user_id"])
-async def get_similar_message(message_id: str, user_id: str = None) -> List[Dict[str, Any]]:
+async def get_similar_message(
+    user_id: str = None, 
+    message_id: Optional[str] = None, 
+    message_content: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
-    Get messages similar to a specific message by using the message content as a query vector.
-    It can be used by passing a message ID, or by passing the content of a message as the message_id.
+    Get messages similar to a specific message by using its content as a query vector.
+    Can be used by passing a message_id to fetch the message, or by passing message_content directly.
+    If message_id is provided, it will be used to fetch the message content.
     
     Args:
-        message_id: The ID of the message to find similar messages for, or the content of the message.
+        message_id: The ID of the message to find similar messages for.
+        message_content: The content of the message to find similar messages for.
     
     Returns:
-        List of similar messages
+        List of similar messages.
     """
     top_k = 10
     query_content = None
+    original_message = None
 
     if user_id is None:
         raise ValueError("user_id is required")
     
-    # Try to get the message from MySQL, assuming message_id is a valid ID
-    original_message = await get_message(user_id, message_id)
+    if not message_id and not message_content:
+        raise ValueError("Either message_id or message_content must be provided.")
+
+    if message_id:
+        original_message = await get_message(user_id, message_id)
+        if original_message:
+            query_content = original_message.msg_content
+        else:
+            # If message_id is provided but not found, return a clear message.
+            return [{"message": f"Message with ID '{message_id}' not found."}]
     
-    if original_message:
-        # If we found a message by ID, use its content for the query
-        query_content = original_message.msg_content
-    else:
-        # If no message was found by ID, assume the input *is* the content
-        return [{"message": "No similar messages found."}]
+    # If no message_id was provided, use message_content.
+    if not query_content and message_content:
+        query_content = message_content
     
+    # If for some reason we still don't have content, we can't proceed.
+    if not query_content:
+        return [{"message": "Could not determine content for similarity search."}]
+
     # Query Pinecone for similar messages
     similar_messages = pinecone_svc.query_messages(user_id, query_content, top_k)
     

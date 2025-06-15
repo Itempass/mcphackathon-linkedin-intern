@@ -6,7 +6,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, text
 import hashlib
 import uuid
 from sqlalchemy.exc import IntegrityError
@@ -221,7 +221,12 @@ async def add_message(
     Returns:
         The created Message object
     """
+    from sqlalchemy import text
+    
+    logger.debug(f"Adding message {message_id} for user {user_id}, thread {thread_name}, sender {sender_name}")
+    
     async with AsyncSessionLocal() as session:
+        # First try to insert normally
         message = Message(
             id=message_id,
             user_id=user_id,
@@ -237,13 +242,22 @@ async def add_message(
         try:
             await session.commit()
             await session.refresh(message)
+            logger.debug(f"Successfully added message {message_id}")
             return message
         except IntegrityError as e:
             # Handle duplicate key error
+            logger.warning(f"IntegrityError occurred for message {message_id}: {e}")
             await session.rollback()
             
             # Check if the existing message is actually the same one we're trying to insert
-            existing_message = await get_message(user_id, message_id)
+            # Use the same session to ensure we see the conflicting record
+            stmt = select(Message).where(
+                Message.user_id == user_id,
+                Message.id == message_id
+            )
+            result = await session.execute(stmt)
+            existing_message = result.scalar_one_or_none()
+            
             if existing_message:
                 # Verify it's the exact same message (content, thread, sender match)
                 if (existing_message.msg_content == msg_content and 
@@ -256,11 +270,50 @@ async def add_message(
                 else:
                     # Same ID but different content - this is a real collision
                     logger.error(f"Message ID collision detected: {message_id} exists with different content")
+                    logger.error(f"Existing: {existing_message.msg_content[:50]}... vs New: {msg_content[:50]}...")
                     raise ValueError(f"Message ID collision: {message_id} already exists with different content")
             else:
-                # Some other integrity error
-                logger.error(f"Failed to add message {message_id}: {e}")
-                raise e
+                # Try a more robust approach using MySQL's ON DUPLICATE KEY UPDATE
+                try:
+                    logger.info(f"Attempting ON DUPLICATE KEY UPDATE fallback for message {message_id}")
+                    # Use raw SQL for better control over duplicate key handling
+                    sql = text("""
+                        INSERT INTO messages (id, user_id, msg_content, type, thread_name, sender_name, timestamp, agent_id)
+                        VALUES (:id, :user_id, :msg_content, :type, :thread_name, :sender_name, :timestamp, :agent_id)
+                        ON DUPLICATE KEY UPDATE
+                            id = VALUES(id)
+                    """)
+                    
+                    await session.execute(sql, {
+                        'id': message_id,
+                        'user_id': user_id,
+                        'msg_content': msg_content,
+                        'type': message_type.value,
+                        'thread_name': thread_name,
+                        'sender_name': sender_name,
+                        'timestamp': timestamp,
+                        'agent_id': agent_id
+                    })
+                    await session.commit()
+                    
+                    # Now fetch the message that was inserted/updated
+                    stmt = select(Message).where(
+                        Message.user_id == user_id,
+                        Message.id == message_id
+                    )
+                    result = await session.execute(stmt)
+                    final_message = result.scalar_one_or_none()
+                    
+                    if final_message:
+                        logger.info(f"Message {message_id} inserted/updated using ON DUPLICATE KEY UPDATE")
+                        return final_message
+                    else:
+                        logger.error(f"Failed to retrieve message after ON DUPLICATE KEY UPDATE: {message_id}")
+                        raise e
+                        
+                except Exception as fallback_error:
+                    logger.error(f"Fallback ON DUPLICATE KEY UPDATE failed for message {message_id}: {fallback_error}")
+                    raise e
 
 # Utility functions for creating IDs (same as in setup script)
 def create_message_id(sender_name: str, timestamp: datetime, content: str) -> str:

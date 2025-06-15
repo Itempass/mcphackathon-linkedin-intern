@@ -15,9 +15,10 @@ Decision rules for if CRM (google sheet) needs update
 - make sure to UPDATE the existing row/cells by overwriting them when relevant, otherwise create a new row
 
 
-If a reply is needed, FIRST ALWAYS search for similar messages and responses of the user by:
-- using the message id of the received message to find similar ones, then use the tool to find the whole thread of that message to see how our user answered
-- don't hesitate to give it another try if no good results where found
+If a reply is needed, call suggest_draft to write a reply in the user's voice that achieves one of these objectives:
+- Get a to a call or meeting: Propose a meeting to discuss things further.
+- Gather Info: Ask questions to learn about their needs or projects.
+- Nurture a Connection: Build rapport with a warm, engaging message.
 
 Match the user's tone: Analyze the user's previous messages for formality, sentence length, and phrasing.
 Be Objective-Driven: Ensure the draft clearly aims achieve one of the objectives.

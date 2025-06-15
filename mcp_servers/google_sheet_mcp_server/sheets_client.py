@@ -18,8 +18,9 @@ def get_gsheets_client():
         'https://www.googleapis.com/auth/drive'
     ]
 
-    # Get credentials path from environment variable
-    creds_path = "mcp_servers/google_sheet_mcp_server/credentials.json"
+    # Construct the absolute path to the credentials file
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    creds_path = os.path.join(dir_path, 'credentials.json')
 
     # Authenticate using service account credentials
     creds = Credentials.from_service_account_file(creds_path, scopes=scopes)

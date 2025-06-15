@@ -300,7 +300,20 @@ class GenericMCPAgent:
                 elif decision.get("action") == "suggest_draft":
                     draft = decision.get('draft', 'No draft content.')
                     logger.info(f"Agent suggested a draft: {draft}")
-                    # The tool call will be added to the history below, so we can just break
+                    
+                    # Add the final draft suggestion to the history before breaking
+                    current_messages.append({
+                        "role": "assistant",
+                        "content": "I have a draft ready.",
+                        "tool_calls": [{
+                            "id": "call_suggest_draft",
+                            "type": "function",
+                            "function": {
+                                "name": "suggest_draft",
+                                "arguments": json.dumps({"draft_content": draft})
+                            }
+                        }]
+                    })
                     break
                 
                 elif decision.get("action") == "call_tool":

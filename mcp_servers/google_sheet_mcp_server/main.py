@@ -1,15 +1,18 @@
 import os
 import sys
 from dotenv import load_dotenv
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 from gspread import Worksheet
 from contextlib import asynccontextmanager
 
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
+
+from fastmcp import FastMCP
 # Add project root to Python path to import shared models
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
 
-from fastmcp import FastMCP
 # Note: Corrected the import path to be relative to the project root
 from mcp_servers.google_sheet_mcp_server.sheets_client import get_gsheets_client, sheet_to_markdown, update_cell, update_sheet_row
 
@@ -22,7 +25,7 @@ SPREADSHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "1Nsg5-g9Wrb-Ll5tcdwrsKchL9Zb
 worksheet: Worksheet = None
 
 @asynccontextmanager
-async def lifespan(app: FastMCP):
+async def lifespan(app: "FastMCP"):
     """Initializes the gspread client and worksheet at application startup."""
     global worksheet
     print("--- Initializing Google Sheets Client ---")

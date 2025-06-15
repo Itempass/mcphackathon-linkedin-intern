@@ -39,7 +39,7 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
     # 3. Store the new messages
     for msg in new_api_messages:
         timestamp = datetime.strptime(f"{msg.date} {msg.time}", "%Y-%m-%d %H:%M:%S")
-        message_id = create_message_id(msg.sender_name, timestamp, msg.message_content)
+        message_id = msg.message_id
         
         await add_message(
             user_id=request.user_id,

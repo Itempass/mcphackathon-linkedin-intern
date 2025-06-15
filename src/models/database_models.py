@@ -1,6 +1,6 @@
 from __future__ import annotations
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, String, DateTime, Text, Enum as SQLEnum
+from sqlalchemy import ForeignKey, String, DateTime, Text, Enum as SQLEnum, func
 from datetime import datetime
 from typing import Optional
 import enum
@@ -35,6 +35,8 @@ class Message(Base):
     timestamp: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # agent_id: UUID (optional)
     agent_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("agents.id"), nullable=True)
+    # created_at: DateTime
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 # 4. Define the Agent model
 class Agent(Base):
@@ -46,3 +48,5 @@ class Agent(Base):
     user_id: Mapped[str] = mapped_column(String(255))
     # messages: JSON array of LLM conversation messages
     messages: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Store JSON as text 
+    # created_at: DateTime
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now()) 

@@ -14,14 +14,8 @@ import os
 from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
 from dotenv import load_dotenv
-try:
-    from fastmcp import Client
-    from fastmcp.exceptions import ClientError
-except ImportError:
-    # For testing without FastMCP
-    Client = object
-    class ClientError(Exception):
-        pass
+from fastmcp import Client
+from fastmcp.exceptions import ClientError
 
 # OpenRouter integration using modern OpenAI client
 from openai import OpenAI
@@ -35,37 +29,31 @@ class GenericMCPAgent:
     AI-powered MCP Agent that uses an LLM to intelligently decide which tools to call.
     
     Features:
-    - Dynamic MCP tool discovery via FastMCP
+    - Uses a shared, persistent connection to MCP servers
     - LLM-driven decision making
     - Multi-step reasoning and tool execution
     - Automatic user context injection
     """
     
-    def __init__(self, server_urls: Union[str, List[str]], user_id: str, agent_id: str, openrouter_api_key: Optional[str] = None):
+    def __init__(self, clients: Dict[str, Client], user_id: str, agent_id: str, openrouter_api_key: Optional[str] = None):
         """
-        Initialize the AI-powered MCP agent.
+        Initialize the AI-powered MCP agent with existing client connections.
         
         Args:
-            server_urls: A single MCP server URL or a list of URLs
+            clients: A dictionary of pre-connected FastMCP.Client objects
             user_id: User ID for context
             agent_id: Agent ID for tracking
             openrouter_api_key: OpenRouter API key (optional, uses env var if not provided)
         """
-        if isinstance(server_urls, str):
-            self.server_urls = [server_urls]
-        else:
-            self.server_urls = server_urls
-            
         self.user_id = user_id
         self.agent_id = agent_id
-        self.clients: List[Client] = []
+        self.clients = list(clients.values())
         self.tools: List[Dict[str, Any]] = []
         self.conversation_history: List[Dict[str, Any]] = []
         
         # Initialize OpenRouter client
         api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
         if api_key:
-            logger.info(f"Initializing OpenRouter client with API key: {api_key[:10]}...")
             self.llm_client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=api_key,
@@ -74,16 +62,14 @@ class GenericMCPAgent:
         else:
             self.has_llm = False
             logger.warning("No OpenRouter API key - agent will run in basic mode")
-    
-    async def __aenter__(self):
-        """Connect to MCP servers and discover tools."""
-        try:
-            for server_url in self.server_urls:
-                client = Client(server_url)
-                await client.__aenter__()
-                self.clients.append(client)
-                
-                # Discover available tools
+
+    async def discover_tools(self):
+        """
+        Discovers available tools from the connected MCP clients.
+        This should be called after the agent is initialized.
+        """
+        for client in self.clients:
+            try:
                 tools_raw = await client.list_tools()
                 
                 # Get current tool names to check for duplicates
@@ -100,22 +86,11 @@ class GenericMCPAgent:
                         "inputSchema": tool.inputSchema or {},
                         "client": client  # Associate tool with its client
                     })
-            
-            logger.info(f"Connected to {len(self.clients)} MCP server(s): {len(self.tools)} tools found.")
-            return self
-            
-        except Exception as e:
-            # Clean up any successful connections if one fails
-            for client in self.clients:
-                await client.__aexit__(None, None, None)
-            raise RuntimeError(f"Failed to connect to one or more MCP servers: {e}")
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Clean up connections."""
-        for client in self.clients:
-            await client.__aexit__(exc_type, exc_val, exc_tb)
-        self.clients = []
-    
+            except Exception as e:
+                logger.error(f"Failed to discover tools for client connected to {client.server_url}: {e}")
+        
+        logger.info(f"Agent initialized with {len(self.tools)} tools from {len(self.clients)} clients.")
+
     def describe_capabilities(self) -> Dict[str, Any]:
         """Describe agent capabilities for external inspection."""
         return {
@@ -141,7 +116,7 @@ class GenericMCPAgent:
             Formatted result string
         """
         if not self.clients:
-            raise RuntimeError("Agent not connected - use async context manager")
+            raise RuntimeError("Agent not initialized correctly - no clients found.")
             
         # Find the tool and its associated client
         tool_to_execute = None
@@ -248,167 +223,103 @@ class GenericMCPAgent:
             # Fallback to simple heuristic
             return {"action": "call_tool", "tool": self.tools[0]["name"], "arguments": {}}
         
-        # Get tools in the OpenAI-compatible format
-        llm_tools = self._format_tools_for_llm()
+        formatted_tools = self._format_tools_for_llm()
+        
+        # Add a timestamp to the conversation history to know when the interaction started
+        self.conversation_history.append({"role": "system", "content": f"Interaction started at {datetime.now().isoformat()}"})
         
         try:
             response = self.llm_client.chat.completions.create(
-                model="anthropic/claude-3.7-sonnet:thinking",
+                model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o"),
                 messages=messages,
-                tools=llm_tools,
+                tools=formatted_tools,
                 tool_choice="auto",
             )
             
             response_message = response.choices[0].message
+            return response_message
             
-            if response_message.tool_calls:
-                tool_call = response_message.tool_calls[0]
-                tool_name = tool_call.function.name
-                
-                # Handle cases where LLM returns an empty string for arguments
-                arguments_str = tool_call.function.arguments
-                if not arguments_str:
-                    arguments = {}
-                else:
-                    try:
-                        arguments = json.loads(arguments_str)
-                    except json.JSONDecodeError:
-                        logger.error(f"LLM returned invalid JSON for arguments: {arguments_str}")
-                        # Fallback to empty dict if parsing fails
-                        arguments = {}
-
-                if tool_name == "task_completed":
-                    return {
-                        "action": "complete",
-                        "summary": arguments.get("summary", "Task completed.")
-                    }
-                elif tool_name == "suggest_draft":
-                    return {
-                        "action": "suggest_draft",
-                        "draft": arguments.get("draft_content", "")
-                    }
-                else:
-                    return {
-                        "action": "call_tool",
-                        "tool": tool_name,
-                        "arguments": arguments
-                    }
-            else:
-                # If the model responds without a tool call, we'll treat it as a final summary.
-                return {
-                    "action": "complete",
-                    "summary": response_message.content
-                }
-                
         except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            return {"action": "call_tool", "tool": self.tools[0]["name"], "arguments": {}}
-    
-    async def run_intelligent_agent(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> List[Dict[str, Any]]:
+            logger.error(f"Error getting LLM decision: {e}")
+            return {"action": "error", "details": str(e)}
+
+    async def run(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> List[Dict[str, Any]]:
         """
-        Run the AI agent with intelligent decision-making.
+        Main agent loop for processing a conversation and executing tools.
         
         Args:
-            messages: The conversation history to start the agent with.
-            max_iterations: Maximum number of tool calls to make
+            messages: The initial messages in the conversation.
+            max_iterations: The maximum number of tool calls to prevent infinite loops.
             
         Returns:
-            The final conversation history (list of message dicts)
+            The complete conversation history.
         """
-        if not self.tools:
-            return messages
+        self.conversation_history = messages
         
-        if not messages:
-            raise ValueError("The 'messages' list cannot be empty.")
+        for i in range(max_iterations):
+            print(f"--- Agent Iteration {i+1} ---")
             
-        logger.info(f"Starting intelligent exploration with {len(self.tools)} available tools")
-        
-        # The conversation is now passed in directly.
-        # We make a copy to avoid modifying the caller's list.
-        current_messages = list(messages)
-        
-        for iteration in range(max_iterations):
-            try:
-                # Get LLM decision
-                decision = await self._get_llm_decision(current_messages)
+            # Get the LLM's decision on what to do next
+            llm_response = await self._get_llm_decision(self.conversation_history)
+            
+            # If the model wants to call a tool
+            if llm_response.tool_calls:
+                self.conversation_history.append(llm_response) # Add assistant's tool request
                 
-                if decision.get("action") == "complete":
-                    summary = decision.get('summary', 'No summary provided.')
-                    logger.info(f"Agent completed task with summary: {summary}")
-                    break
-                
-                elif decision.get("action") == "suggest_draft":
-                    draft = decision.get('draft', 'No draft content.')
-                    logger.info(f"Agent suggested a draft: {draft}")
+                # Execute all tool calls
+                tool_outputs = []
+                for tool_call in llm_response.tool_calls:
+                    tool_name = tool_call.function.name
                     
-                    # Add the final draft suggestion to the history before breaking
-                    current_messages.append({
-                        "role": "assistant",
-                        "content": "I have a draft ready.",
-                        "tool_calls": [{
-                            "id": "call_suggest_draft",
-                            "type": "function",
-                            "function": {
-                                "name": "suggest_draft",
-                                "arguments": json.dumps({"draft_content": draft})
-                            }
-                        }]
-                    })
-                    break
-                
-                elif decision.get("action") == "call_tool":
-                    tool_name = decision.get("tool")
-                    tool_args = decision.get("arguments", {})
+                    # Handle internal 'task_completed' tool
+                    if tool_name == "task_completed":
+                        print("Agent completed the task.")
+                        # End the loop by returning the history
+                        return self.conversation_history
                     
-                    if tool_name in self.tool_names:
-                        # Add assistant's thought process to history
-                        current_messages.append({
-                            "role": "assistant",
-                            "content": f"I should call the tool `{tool_name}` with arguments `{json.dumps(tool_args)}`.",
-                            "tool_calls": [{
-                                "id": f"call_{tool_name}",
-                                "type": "function",
-                                "function": {
-                                    "name": tool_name,
-                                    "arguments": json.dumps(tool_args)
-                                }
-                            }]
-                        })
+                    # Handle internal 'suggest_draft' tool
+                    if tool_name == "suggest_draft":
+                        print("Agent suggested a draft.")
+                        # End the loop, the service layer will handle the draft
+                        return self.conversation_history
+
+                    try:
+                        arguments = json.loads(tool_call.function.arguments)
+                        print(f"Tool Call: {tool_name}({arguments})")
                         
-                        # Execute the tool
-                        result = await self.execute_tool(tool_name, tool_args)
+                        # Execute the tool and get the result
+                        tool_result = await self.execute_tool(tool_name, arguments)
                         
-                        # Add tool execution result to history for the next turn
-                        current_messages.append({
+                        tool_outputs.append({
+                            "tool_call_id": tool_call.id,
                             "role": "tool",
-                            "tool_call_id": f"call_{tool_name}",
                             "name": tool_name,
-                            "content": result,
+                            "content": tool_result,
                         })
-                        
-                    else:
-                        logger.error(f"LLM tried to call an unknown tool: {tool_name}")
-                        # Add error message to history
-                        current_messages.append({
-                            "role": "user",
-                            "content": f"Error: You tried to call a tool named '{tool_name}' which does not exist."
+
+                    except json.JSONDecodeError:
+                        error_msg = f"Error: Invalid JSON arguments for tool {tool_name}."
+                        print(error_msg)
+                        tool_outputs.append({
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": error_msg,
                         })
                 
-                else:
-                    logger.error(f"LLM returned an unknown action: {decision.get('action')}")
-                    break
-                    
-            except Exception as e:
-                logger.error(f"Agent loop failed: {e}")
+                self.conversation_history.extend(tool_outputs) # Add tool results to history
+
+            # If the model returns a standard message, the conversation is over
+            else:
+                self.conversation_history.append(llm_response)
+                print("--- Agent Finished ---")
                 break
-        
-        logger.info(f"Intelligent exploration completed")
-        return current_messages
+                
+        return self.conversation_history
 
 
-# Convenience function for simple usage
 async def run_intelligent_agent(
-    server_urls: Union[str, List[str]],
+    mcp_clients: Dict[str, Client],
     user_id: str,
     agent_id: str,
     messages: List[Dict[str, Any]],
@@ -416,44 +327,68 @@ async def run_intelligent_agent(
     openrouter_api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    Run an intelligent MCP agent with AI decision-making.
+    High-level function to run the agent with shared clients.
     
     Args:
-        server_urls: A single MCP server URL or a list of URLs
-        user_id: User ID for context
-        agent_id: Agent ID for tracking  
-        messages: The conversation history to start the agent with.
-        max_iterations: Maximum number of tool calls
-        openrouter_api_key: OpenRouter API key (optional, uses OPENROUTER_API_KEY env var)
+        mcp_clients: A dictionary of pre-connected FastMCP.Client objects.
+        user_id: The user's ID.
+        agent_id: The agent's ID for this run.
+        messages: The initial conversation messages.
+        max_iterations: Max number of agent iterations.
+        openrouter_api_key: OpenRouter API key.
         
     Returns:
-        The final conversation history (list of message dicts)
+        The full conversation history.
     """
-    async with GenericMCPAgent(server_urls, user_id, agent_id, openrouter_api_key) as agent:
-        return await agent.run_intelligent_agent(messages, max_iterations)
+    # Initialize the agent with the shared clients
+    agent = GenericMCPAgent(mcp_clients, user_id, agent_id, openrouter_api_key)
+    
+    # Discover the tools from the connected clients
+    await agent.discover_tools()
+    
+    # Run the agent's main processing loop
+    conversation_history = await agent.run(messages, max_iterations)
+    
+    return conversation_history
 
 
-# Example usage
 async def main():
-    """Example of how to use the Generic MCP Agent."""
-    
-    # Example messages - this works with ANY MCP server
-    messages = [
-        {"role": "user", "content": "I need help with the 'example_thread'. Please check the 'messages' table and look for 'important information'."}
-    ]
-    
-    # Run the agent - it will intelligently explore whatever tools are available
-    final_conversation = await run_intelligent_agent(
-        server_urls=["http://localhost:8001/db-mcp"], 
-        user_id="user123",
-        agent_id="agent456", 
-        messages=messages,
-        max_iterations=3
-    )
-    
-    print("\n--- Final Conversation ---")
-    print(json.dumps(final_conversation, indent=2))
+    """
+    Example of how to run the agent directly.
+    This requires MCP servers to be running.
+    """
+    # In a real app, these clients would be created at startup and passed in.
+    db_mcp_url = "http://localhost:8001/mcp"
+    gsheet_mcp_url = "http://localhost:8002/mcp"
 
+    db_client = Client(db_mcp_url)
+    gsheet_client = Client(gsheet_mcp_url)
+
+    # Manually manage client connections for this standalone example
+    await db_client.__aenter__()
+    await gsheet_client.__aenter__()
+    
+    clients = {"db": db_client, "gsheet": gsheet_client}
+    
+    try:
+        # Example: Ask the agent to read the sheet and summarize it
+        user_id = "test_user"
+        agent_id = "test_agent"
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant. Use the available tools to answer the user's question."},
+            {"role": "user", "content": "Please read the Google Sheet and tell me what's in cell A1."}
+        ]
+        
+        conversation = await run_intelligent_agent(clients, user_id, agent_id, messages)
+        
+        print("\n--- Final Conversation History ---")
+        for message in conversation:
+            print(message)
+            
+    finally:
+        # Clean up connections
+        await db_client.__aexit__(None, None, None)
+        await gsheet_client.__aexit__(None, None, None)
 
 if __name__ == "__main__":
     asyncio.run(main()) 

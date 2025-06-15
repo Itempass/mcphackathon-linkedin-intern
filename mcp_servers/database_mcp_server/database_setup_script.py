@@ -7,7 +7,6 @@ Creates tables and adds mock data for testing
 import os
 import sys
 import asyncio
-from datetime import datetime
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -20,7 +19,6 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.insert(0, project_root)
 
 from src.models.database_models import Base, Message, Agent, MessageType
-from src.services.pinecone_service import PineconeService
 
 # Load environment variables
 load_dotenv(override=True)
@@ -35,15 +33,6 @@ if db_url.startswith("mysql://"):
 
 engine = create_async_engine(db_url)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-def create_message_id(sender_name: str, timestamp: datetime, content: str) -> str:
-    """Create a hash ID for message based on sender, timestamp, and content"""
-    data = f"{sender_name}_{timestamp.isoformat()}_{content}"
-    return hashlib.sha256(data.encode()).hexdigest()[:32]
-
-def create_user_id(user_name: str) -> str:
-    """Create a hash ID for user based on username"""
-    return hashlib.sha256(user_name.encode()).hexdigest()[:32]
 
 async def drop_tables():
     """Drop all existing database tables"""
@@ -72,179 +61,6 @@ async def create_tables():
         await conn.run_sync(Base.metadata.create_all)
     print("✅ Database tables created successfully")
 
-async def add_mock_data():
-    """Add mock data to the database"""
-    print("Adding mock data...")
-    
-    async with AsyncSessionLocal() as session:
-        # Create mock agents with LLM conversation messages
-        agent1_id = str(uuid.uuid4())
-        agent2_id = str(uuid.uuid4())
-        
-        # Sample LLM conversation for agent1
-        agent1_messages = [
-            {"role": "system", "content": "You are a helpful coding assistant."},
-            {"role": "user", "content": "Help me debug this Python code."},
-            {"role": "assistant", "content": "I'd be happy to help! Please share your code and I'll take a look."}
-        ]
-        
-        # Sample LLM conversation for agent2
-        agent2_messages = [
-            {"role": "system", "content": "You are a database expert."},
-            {"role": "user", "content": "How do I optimize this SQL query?"},
-            {"role": "assistant", "content": "Let me analyze your query and suggest some optimizations."}
-        ]
-        
-        import json
-        agent1 = Agent(
-            id=agent1_id, 
-            user_id=create_user_id("system"),
-            messages=json.dumps(agent1_messages)
-        )
-        agent2 = Agent(
-            id=agent2_id, 
-            user_id=create_user_id("system"),
-            messages=json.dumps(agent2_messages)
-        )
-        
-        session.add(agent1)
-        session.add(agent2)
-        
-        # Create mock messages
-        timestamp1 = datetime(2024, 6, 14, 10, 30, 0)
-        timestamp2 = datetime(2024, 6, 14, 11, 15, 0)
-        timestamp3 = datetime(2024, 6, 14, 12, 0, 0)
-        timestamp4 = datetime(2024, 6, 14, 13, 30, 0)
-        timestamp5 = datetime(2024, 6, 14, 14, 45, 0)
-        
-        message1 = Message(
-            id=create_message_id("john_doe", timestamp1, "Hello, this is my first message!"),
-            user_id=create_user_id("john_doe"),
-            msg_content="Hello, this is my first message!",
-            type=MessageType.MESSAGE,
-            thread_name="general_chat",
-            sender_name="john_doe",
-            timestamp=timestamp1,
-            agent_id=agent1_id
-        )
-        
-        message2 = Message(
-            #id=create_message_id("jane_smith", timestamp2, "Working on the database integration."),
-            id="aaaaa",
-            user_id="jane_smith",
-            msg_content="Working on the database integration.",
-            type=MessageType.MESSAGE,
-            thread_name="development",
-            sender_name="jane_smith",
-            timestamp=timestamp2,
-            agent_id=agent2_id
-        )
-        
-        message3 = Message(
-            id="bbbbb",
-            user_id="jane_smith",
-            msg_content="This is a draft message for review.",
-            type=MessageType.MESSAGE,
-            thread_name="general_chat",
-            sender_name="jane_smith",
-            timestamp=timestamp3,
-            agent_id=None  # No agent assigned to this message
-        )
-        
-        message4 = Message(
-            id=create_message_id("bob_wilson", timestamp4, "Can someone help me with the API documentation?"),
-            user_id=create_user_id("bob_wilson"),
-            msg_content="Can someone help me with the API documentation?",
-            type=MessageType.MESSAGE,
-            thread_name="support",
-            sender_name="bob_wilson",
-            timestamp=timestamp4,
-            agent_id=agent1_id
-        )
-        
-        message5 = Message(
-            id=create_message_id("carol_davis", timestamp5, "Draft proposal for the new feature."),
-            user_id=create_user_id("carol_davis"),
-            msg_content="Draft proposal for the new feature.",
-            type=MessageType.DRAFT,
-            thread_name="development",
-            sender_name="carol_davis",
-            timestamp=timestamp5,
-            agent_id=agent2_id
-        )
-        
-        session.add(message1)
-        session.add(message2)
-        session.add(message3)
-        session.add(message4)
-        session.add(message5)
-        
-        # Commit all changes
-        await session.commit()
-        
-    print("✅ Mock data added successfully:")
-    print("  - 2 Agents")
-    print("  - 5 Messages (3 MESSAGE type, 2 DRAFT type)")
-
-async def add_pinecone_data():
-    """Add mock data to Pinecone"""
-    print("Setting up Pinecone with mock data...")
-    
-    try:
-        pinecone_service = PineconeService()
-        
-        # Create the same mock messages that we added to the database
-        timestamp1 = datetime(2024, 6, 14, 10, 30, 0)
-        timestamp2 = datetime(2024, 6, 14, 11, 15, 0)
-        timestamp3 = datetime(2024, 6, 14, 12, 0, 0)
-        timestamp4 = datetime(2024, 6, 14, 13, 30, 0)
-        timestamp5 = datetime(2024, 6, 14, 14, 45, 0)
-        
-        # Upsert each message to Pinecone
-        mock_messages = [
-            {
-                "id": create_message_id("john_doe", timestamp1, "Hello, this is my first message!"),
-                "user_id": "jane_smith",
-                "msg_content": "Hello, this is my first message!"
-            },
-            {
-                "id": "aaaaa",
-                "user_id": "jane_smith",
-                "msg_content": "Working on the database integration."
-            },
-            {
-                "id": create_message_id("alice_johnson", timestamp3, "This is a draft message for review."),
-                "user_id": create_user_id("alice_johnson"),
-                "msg_content": "This is a draft message for review."
-            },
-            {
-                "id": create_message_id("bob_wilson", timestamp4, "Can someone help me with the API documentation?"),
-                "user_id": create_user_id("bob_wilson"),
-                "msg_content": "Can someone help me with the API documentation?"
-            },
-            {
-                "id": create_message_id("carol_davis", timestamp5, "Draft proposal for the new feature."),
-                "user_id": create_user_id("carol_davis"),
-                "msg_content": "Draft proposal for the new feature."
-            }
-        ]
-        
-        for message in mock_messages:
-            pinecone_service.upsert_to_pinecone(
-                user_id=message["user_id"],
-                message_id=message["id"],
-                msg_content=message["msg_content"],
-                direction="received"
-            )
-            print(f"  ✓ Upserted message: {message['id'][:8]}...")
-        
-        print("✅ Pinecone setup completed successfully:")
-        print("  - 5 Messages upserted to vector database")
-        
-    except Exception as e:
-        print(f"❌ Error during Pinecone setup: {e}")
-        raise
-
 async def main():
     """Main setup function"""
     print("🚀 Starting database setup...")
@@ -252,11 +68,8 @@ async def main():
     try:
         await drop_tables()
         await create_tables()
-        await add_mock_data()
-        await add_pinecone_data()
-        print("\n✅ Complete database setup completed successfully!")
-        print("  - MySQL database tables created and populated")
-        print("  - Pinecone vector database populated")
+        print("\n✅ Database setup completed successfully!")
+        print("  - MySQL database tables created")
         
     except Exception as e:
         print(f"\n❌ Error during database setup: {e}")

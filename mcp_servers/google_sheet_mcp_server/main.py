@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 
 from fastmcp import FastMCP
 # Note: Corrected the import path to be relative to the project root
-from mcp_servers.google_sheet_mcp_server.sheets_client import get_gsheets_client, sheet_to_markdown, update_cell
+from mcp_servers.google_sheet_mcp_server.sheets_client import get_gsheets_client, sheet_to_markdown, update_cell, update_row
 
 # --- Configuration ---
 load_dotenv(override=True)
@@ -55,6 +55,23 @@ async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict
     worksheet = get_worksheet()
     # The underlying function is synchronous, but FastMCP can handle it.
     return update_cell(worksheet, cell_id, value)
+
+@mcp.tool(exclude_args=["user_id"])
+async def update_row(first_cell: str, values: list[str], user_id: str=None) -> Dict:
+    """
+    Updates a row in the Google Sheet with a list of values.
+
+    Args:
+        - first_cell: The starting cell of the row to update (e.g., "A1", "B2").
+        - values: A list of string values to write into the cells following the first cell.
+    
+    Returns:
+        A dictionary with the status of the operation.
+    """
+    print(f"Updating row starting at {first_cell} with values {values}")
+    worksheet = get_worksheet()
+    # The underlying function is synchronous, but FastMCP can handle it.
+    return update_row(worksheet, first_cell, values)
 
 # --- Server Execution ---
 if __name__ == "__main__":

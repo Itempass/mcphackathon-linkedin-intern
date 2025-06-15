@@ -56,8 +56,22 @@ def update_cell(worksheet: gspread.Worksheet, cell_id: str, value: str):
     """
     Updates a single cell in the worksheet.
     """
-    worksheet.update_acell(cell_id, value)
+    worksheet.update(cell_id, value)
     return {"status": "success", "message": f"Cell {cell_id} updated."}
+
+def update_row(worksheet: gspread.Worksheet, start_cell: str, values: list[str]):
+    """
+    Updates a row in the worksheet with a list of values, starting from start_cell.
+    """
+    try:
+        # gspread's update method can take a starting cell and a 2D array.
+        # It will update cells to the right and down from the starting cell.
+        # We wrap `values` in another list to make it a "row" for gspread.
+        worksheet.update(start_cell, [values])
+        return {"status": "success", "message": f"Row starting at {start_cell} updated with {len(values)} values."}
+    except Exception as e:
+        # It's good practice to catch potential exceptions from the API call
+        return {"status": "error", "message": str(e)}
 
 if __name__ == '__main__':
     # Example usage:
@@ -88,6 +102,11 @@ if __name__ == '__main__':
         print("\n--- Updating Cell B2 ---")
         update_result = update_cell(sheet, "B2", "This is an updated value!")
         print(update_result)
+
+        # --- Example of updating a row ---
+        print("\n--- Updating Row 3 ---")
+        row_update_result = update_row(sheet, "A3", ["This", "is", "a", "new", "row!"])
+        print(row_update_result)
 
         # --- Verify the update by reading again ---
         print("\n--- Reading Sheet Again ---")

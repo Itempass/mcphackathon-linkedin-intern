@@ -282,22 +282,25 @@ class GenericMCPAgent:
                 for tool_call in assistant_response.tool_calls:
                     tool_name = tool_call.function.name
                     
-                    # Handle our internal 'task_completed' tool
-                    if tool_name == "task_completed":
-                        logger.info("✅ Agent signaled task completion.")
+                    # Handle empty argument string from LLM
+                    arguments_str = tool_call.function.arguments
+                    if not arguments_str:
+                        arguments = {}
+                    else:
+                        try:
+                            arguments = json.loads(arguments_str)
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to decode arguments for tool {tool_name}: {arguments_str}")
+                            tool_result_str = f"Error: Invalid JSON arguments for {tool_name}."
+                            self.conversation_history.append({"role": "tool", "tool_call_id": tool_call.id, "name": tool_name, "content": tool_result_str})
+                            continue
+
+                    logger.info(f"Tool call: {tool_name}({arguments})")
+
+                    # Handle internal tools first
+                    if tool_name == "task_completed" or tool_name == "suggest_draft":
+                        logger.info(f"✅ Agent signaled {tool_name} completion.")
                         return self.conversation_history
-                    # Handle our internal 'suggest_draft' tool
-                    if tool_name == "suggest_draft":
-                        logger.info("✅ Agent suggested a draft. Ending execution.")
-                        return self.conversation_history
-                        
-                    try:
-                        arguments = json.loads(tool_call.function.arguments)
-                        logger.info(f"Tool call: {tool_name}({arguments})")
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to decode arguments for tool {tool_name}: {tool_call.function.arguments}")
-                        tool_result = f"Error: Invalid JSON arguments for {tool_name}"
-                        arguments = {} # Set empty dict to avoid breaking downstream
                     
                     # Execute the tool and get the result
                     tool_result = await self.execute_tool(tool_name, arguments)

@@ -264,7 +264,18 @@ class GenericMCPAgent:
             if response_message.tool_calls:
                 tool_call = response_message.tool_calls[0]
                 tool_name = tool_call.function.name
-                arguments = json.loads(tool_call.function.arguments)
+                
+                # Handle cases where LLM returns an empty string for arguments
+                arguments_str = tool_call.function.arguments
+                if not arguments_str:
+                    arguments = {}
+                else:
+                    try:
+                        arguments = json.loads(arguments_str)
+                    except json.JSONDecodeError:
+                        logger.error(f"LLM returned invalid JSON for arguments: {arguments_str}")
+                        # Fallback to empty dict if parsing fails
+                        arguments = {}
 
                 if tool_name == "task_completed":
                     return {

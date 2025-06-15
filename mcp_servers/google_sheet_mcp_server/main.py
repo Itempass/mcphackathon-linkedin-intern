@@ -45,12 +45,13 @@ async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict
     Updates a single cell in the Google Sheet.
 
     Args:
-        cell_id: The ID of the cell to update (e.g., "A1", "B2").
-        value: The new value to write into the cell.
+        - cell_id: The ID of the cell to update (e.g., "A1", "B2").
+        -value: The new value to write into the cell.
     
     Returns:
         A dictionary with the status of the operation.
     """
+    print(f"Updating cell {cell_id} with value {value}")
     worksheet = get_worksheet()
     # The underlying function is synchronous, but FastMCP can handle it.
     return update_cell(worksheet, cell_id, value)

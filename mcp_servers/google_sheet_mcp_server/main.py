@@ -47,7 +47,7 @@ async def read_sheet(user_id: str=None) -> str:
 @mcp.tool(exclude_args=["user_id"])
 async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict:
     """
-    Updates a single cell in the Google Sheet.
+    Updates a single cell in the Google Sheet. When updating the "touch points" column, make sure to include the date of each touchpoint format YYYY-MM-DD.
 
     Args:
         - cell_id: The ID of the cell to update (e.g., "A1", "B2").
@@ -64,7 +64,7 @@ async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict
 @mcp.tool(exclude_args=["user_id"])
 async def update_row(first_cell: str, values: list[str], user_id: str=None) -> Dict:
     """
-    Updates a row in the Google Sheet with a list of values.
+    Updates a row in the Google Sheet with a list of values. When updating the "touch points" column, make sure to include the date of each touchpoint format YYYY-MM-DD.
 
     Args:
         - first_cell: The starting cell of the row to update (e.g., "A1", "B2").

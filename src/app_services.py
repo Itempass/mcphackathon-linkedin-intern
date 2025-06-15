@@ -120,6 +120,10 @@ Analyze the conversation and suggest a suitable draft."""
         if new_messages:
             print("SERVICE: There are newer messages than the agent's context when making this draft. Draft discarded.")
             return None
+        # if there is already a draft for the exaxt same thread, discard the draft
+        if len(new_messages) == 0 and any(msg.type == MessageType.DRAFT for msg in all_current_thread_messages):
+            print("SERVICE: A draft already exists for this exact same thread. Draft discarded.")
+            return None
         
         draft_timestamp = datetime.now()
         draft_id = create_message_id("Agent", draft_timestamp, draft_content)

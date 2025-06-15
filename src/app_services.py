@@ -108,8 +108,14 @@ Analyze the conversation and suggest a suitable draft."""
     if draft_content:
         all_current_thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
         all_current_message_ids = {msg.id for msg in all_current_thread_messages}
-        all_agent_context_message_ids = [msg.id for msg in messages]
-        new_messages = [msg for msg in all_current_thread_messages if msg.id not in all_agent_context_message_ids]
+        
+        # Extract message IDs from thread_messages that were used to create the agent context
+        thread_message_ids = {msg.id for msg in thread_messages if msg.type == MessageType.MESSAGE}
+        
+        # Check for new messages that weren't in the agent's context
+        new_messages = [msg for msg in all_current_thread_messages 
+                       if msg.type == MessageType.MESSAGE and 
+                       msg.id not in thread_message_ids]
 
         if new_messages:
             print("SERVICE: There are newer messages than the agent's context when making this draft. Draft discarded.")

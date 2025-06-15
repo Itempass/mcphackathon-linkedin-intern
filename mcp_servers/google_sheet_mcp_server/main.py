@@ -2,6 +2,8 @@ import os
 import sys
 from dotenv import load_dotenv
 from typing import Dict
+from gspread import Worksheet
+from contextlib import asynccontextmanager
 
 # Add project root to Python path to import shared models
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -16,16 +18,22 @@ load_dotenv(override=True)
 # Allow configuring the sheet ID via environment variable, with a fallback
 SPREADSHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "1Nsg5-g9Wrb-Ll5tcdwrsKchL9ZbE23nKmsjQRK3niIE")
 
-# --- FastMCP Application Setup ---
-mcp = FastMCP("Google Sheets MCP Server")
+# Global variable to hold the worksheet object
+worksheet: Worksheet = None
 
-# --- Helper function to get the sheet ---
-# This avoids repeatedly authenticating for every tool call in a single request if we expand later
-def get_worksheet():
-    """Helper to get the 'Sheet1' worksheet from the configured spreadsheet."""
+@asynccontextmanager
+async def lifespan(app: FastMCP):
+    """Initializes the gspread client and worksheet at application startup."""
+    global worksheet
+    print("--- Initializing Google Sheets Client ---")
     client = get_gsheets_client()
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    return spreadsheet.worksheet("Sheet1")
+    worksheet = spreadsheet.worksheet("Sheet1")
+    print("--- Google Sheets Client Initialized ---")
+    yield
+
+# --- FastMCP Application Setup ---
+mcp = FastMCP("Google Sheets MCP Server", lifespan=lifespan)
 
 # --- Tools ---
 
@@ -36,7 +44,6 @@ async def read_sheet(user_id: str=None) -> str:
     Each cell in the markdown table is prefixed with its cell ID (e.g., [A1]).
     """
     try:
-        worksheet = get_worksheet()
         # The underlying function is synchronous, but FastMCP can handle it.
         return sheet_to_markdown(worksheet)
     except Exception as e:
@@ -57,7 +64,6 @@ async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict
         A dictionary with the status of the operation.
     """
     print(f"Updating cell {cell_id} with value {value}")
-    worksheet = get_worksheet()
     # The underlying function is synchronous, but FastMCP can handle it.
     return update_cell(worksheet, cell_id, value)
 
@@ -74,7 +80,6 @@ async def update_row(first_cell: str, values: list[str], user_id: str=None) -> D
         A dictionary with the status of the operation.
     """
     print(f"Updating row starting at {first_cell} with values {values}")
-    worksheet = get_worksheet()
     # The underlying function is synchronous, but FastMCP can handle it.
     return update_sheet_row(worksheet, first_cell, values)
 

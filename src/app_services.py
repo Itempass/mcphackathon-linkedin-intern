@@ -132,7 +132,9 @@ Analyze the conversation and suggest a suitable draft."""
             draft_id = create_message_id("Agent", draft_timestamp, draft_content)
 
             # Save the agent information with conversation history before adding the message
+            print(f"SERVICE: Attempting to save agent {agent_id} with conversation history.")
             await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+            print(f"SERVICE: Successfully saved agent {agent_id}.")
             
             # Store the draft
             await add_message(
@@ -150,7 +152,9 @@ Analyze the conversation and suggest a suitable draft."""
             return draft_id
         
         # Save the agent information with conversation history
+        print(f"SERVICE: Attempting to save agent {agent_id} with conversation history.")
         await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+        print(f"SERVICE: Successfully saved agent {agent_id}.")
         
         print("SERVICE: Agent did not produce a draft. No new draft created.")
         return None

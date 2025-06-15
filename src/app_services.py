@@ -108,6 +108,9 @@ Analyze the conversation and suggest a suitable draft."""
         draft_timestamp = datetime.now()
         draft_id = create_message_id("Agent", draft_timestamp, draft_content)
 
+        # Save the agent information with conversation history before adding the message
+        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+        
         # Store the draft
         await add_message(
             user_id=request.user_id,
@@ -119,9 +122,6 @@ Analyze the conversation and suggest a suitable draft."""
             timestamp=draft_timestamp,
             agent_id=agent_id
         )
-        
-        # Save the agent information with conversation history
-        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
 
         print(f"SERVICE: Created new draft {draft_id} for thread {request.thread_name}.")
         return draft_id
@@ -206,6 +206,10 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
         draft_timestamp = datetime.now()
         draft_id = create_message_id("Agent", draft_timestamp, revised_content)
         await remove_message(request.user_id, request.draft_message_id)
+        
+        # Save the agent information with conversation history before adding the message
+        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+        
         await add_message(
             user_id=request.user_id,
             message_id=draft_id,
@@ -217,9 +221,6 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
             agent_id=agent_id
         )
         
-        # Save the agent information with conversation history
-        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
-
         print(f"SERVICE: Created revised draft {draft_id} with agent {agent_id}")
         return draft_id
 

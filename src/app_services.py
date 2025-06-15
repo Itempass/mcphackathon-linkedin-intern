@@ -107,7 +107,6 @@ Analyze the conversation and suggest a suitable draft."""
     # Only store a draft if one was successfully created by the agent
     if draft_content:
         all_current_thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
-        all_current_message_ids = {msg.id for msg in all_current_thread_messages}
         
         # Extract message IDs from thread_messages that were used to create the agent context
         thread_message_ids = {msg.id for msg in thread_messages if msg.type == MessageType.MESSAGE}
@@ -189,11 +188,16 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
     """
     print(f"SERVICE: Processing feedback for draft {request.draft_message_id}")
 
-    # 1. Get thread history and the draft that needs revision
-    thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
-    old_draft = next((msg for msg in thread_messages if msg.id == request.draft_message_id), None)
+    # 1. Get the draft that needs revision
+    old_draft = await get_message(request.user_id, request.draft_message_id)
     if not old_draft:
         raise ValueError(f"Draft {request.draft_message_id} not found")
+    
+    # Get the thread name from the draft message
+    thread_name = old_draft.thread_name
+    
+    # Get all thread messages
+    thread_messages = await get_all_messages_of_thread(request.user_id, thread_name)
 
     # 2. Set up the agent to generate a revised draft
     agent_id = old_draft.agent_id or str(uuid.uuid4())
@@ -247,7 +251,7 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
             message_id=draft_id,
             message_type=MessageType.DRAFT,
             msg_content=revised_content,
-            thread_name=request.thread_name,
+            thread_name=thread_name,
             sender_name="Agent",
             timestamp=draft_timestamp,
             agent_id=agent_id

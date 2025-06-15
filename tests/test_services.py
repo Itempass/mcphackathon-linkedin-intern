@@ -262,6 +262,9 @@ async def test_create_revised_draft_from_feedback(mocker):
         if not old_draft:
             raise ValueError(f"Draft {request.draft_message_id} not found")
         
+        # Get the thread_name from the old draft
+        thread_name = old_draft.thread_name
+        
         # Create revised draft
         agent_id = old_draft.agent_id or str(uuid.uuid4())
         revised_content = "Mock LLM revised draft."
@@ -275,7 +278,7 @@ async def test_create_revised_draft_from_feedback(mocker):
             message_id=draft_id,
             message_type=MessageType.DRAFT,
             msg_content=revised_content,
-            thread_name=request.thread_name,
+            thread_name=thread_name,
             sender_name="Agent",
             timestamp=draft_timestamp,
             agent_id=agent_id
@@ -323,7 +326,6 @@ async def test_create_revised_draft_from_feedback(mocker):
         # Create feedback request
         request = api_models.APIProcessFeedbackRequest(
             user_id=user_id,
-            thread_name=thread_name,
             draft_message_id=old_draft_id,
             feedback="Please make it shorter."
         )

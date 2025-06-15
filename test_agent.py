@@ -101,15 +101,15 @@ async def test_agent_loop():
         "thread_name": "test_thread_123",
         "search_query": "test query",
         "table_name": "messages",
-        "message_id": "82b8f25cb895ad684a3f8bfc34794bf1",
-        "user_id": "3d6296ea-3f22-44d8-b6f1-1a5fbf65e0b6",
+        "message_id": "06367a0fa58905d24afa432b4a186a95",
+        "user_id": "fb202dd1-8fd2-41e0-8532-8d714d024151",
         "action": "explore"
     }
     
     try:
         results = await run_intelligent_agent(
             server_url_or_path=mcp_url,
-            user_id="3d6296ea-3f22-44d8-b6f1-1a5fbf65e0b6",
+            user_id="fb202dd1-8fd2-41e0-8532-8d714d024151",
             agent_id="test_agent_456",
             context=test_context,
             max_iterations=3  # Keep it short for testing

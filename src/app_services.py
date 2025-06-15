@@ -3,15 +3,17 @@ Services layer for handling business logic and database operations.
 """
 
 import uuid
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+import os
 
 from src.models import api_models
 from src.models.database_models import MessageType
 from src.services.mysql_service import *
-from src.llm_client import get_llm_completion
+from src.agent import run_intelligent_agent
 
-async def process_thread_and_create_draft(request: api_models.APISendMessageRequest) -> str:
+async def process_thread_and_create_draft(request: api_models.APISendMessageRequest) -> Optional[str]:
     """
     Service to handle processing a thread of messages, storing new ones,
     invalidating old drafts, and creating a new draft using the LLM.
@@ -26,7 +28,7 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
 
     if not new_api_messages:
         print("SERVICE: No new messages found. No action taken.")
-        return 
+        return None
 
     print(f"SERVICE: Found {len(new_api_messages)} new messages.")
 
@@ -56,33 +58,73 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
     thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
     thread_messages.sort(key=lambda msg: msg.timestamp)
 
-    # Format messages for LLM
-    llm_messages = [
-        {"role": "system", "content": "Process thread prompt"},  # TODO: Load from file
-        *[{
-            "role": "user" if msg.sender_name != "Agent" else "assistant",
-            "content": msg.msg_content
-        } for msg in thread_messages if msg.type == MessageType.MESSAGE]
+    # Run the agent to process the thread and suggest a draft
+    agent_id = str(uuid.uuid4())
+    
+    # Construct a rich, conversational prompt for the agent
+    history_str = "\n".join([f"- {msg.sender_name}: {msg.msg_content}" for msg in thread_messages if msg.type == MessageType.MESSAGE])
+    messages = [
+        {
+            "role": "system", 
+            "content": "You are an expert assistant. Your primary goal is to help the user by drafting a reply to a conversation. Use the tools provided to understand the conversation's context, then use the `suggest_draft` tool to propose a reply. Be concise and helpful."
+        },
+        {
+            "role": "user",
+            "content": f"""A new message has arrived in the thread '{request.thread_name}'. Please generate a helpful draft reply.
+
+Here is the conversation history so far:
+---
+{history_str}
+---
+
+Analyze the conversation and suggest a suitable draft."""
+        }
     ]
-
-    # Generate draft with LLM
-    draft_content = await get_llm_completion(llm_messages)
-    draft_timestamp = datetime.now()
-    draft_id = create_message_id("Agent", draft_timestamp, draft_content)
-
-    # Store the draft
-    await add_message(
+    
+    agent_results, conversation_history = await run_intelligent_agent(
+        server_url_or_path=f"{os.getenv('BACKEND_BASE_URL')}/mcp",
         user_id=request.user_id,
-        message_id=draft_id,
-        message_type=MessageType.DRAFT,
-        msg_content=draft_content,
-        thread_name=request.thread_name,
-        sender_name="Agent",
-        timestamp=draft_timestamp
+        agent_id=agent_id,
+        messages=messages
     )
 
-    print(f"SERVICE: Created new draft {draft_id} for thread {request.thread_name}.")
-    return draft_id
+    # Extract draft from the agent's final action by checking for a specific tool call
+    draft_content = None
+    if conversation_history:
+        # Check the last message from the assistant for a 'suggest_draft' tool call
+        last_message = conversation_history[-1]
+        if last_message.get("role") == "assistant" and last_message.get("tool_calls"):
+            for tool_call in last_message["tool_calls"]:
+                if tool_call.get("function", {}).get("name") == "suggest_draft":
+                    try:
+                        args = json.loads(tool_call["function"]["arguments"])
+                        draft_content = args.get("draft_content")
+                        break 
+                    except (json.JSONDecodeError, AttributeError):
+                        print("SERVICE: Could not parse draft from tool call arguments.")
+
+    # Only store a draft if one was successfully created by the agent
+    if draft_content:
+        draft_timestamp = datetime.now()
+        draft_id = create_message_id("Agent", draft_timestamp, draft_content)
+
+        # Store the draft
+        await add_message(
+            user_id=request.user_id,
+            message_id=draft_id,
+            message_type=MessageType.DRAFT,
+            msg_content=draft_content,
+            thread_name=request.thread_name,
+            sender_name="Agent",
+            timestamp=draft_timestamp,
+            agent_id=agent_id
+        )
+
+        print(f"SERVICE: Created new draft {draft_id} for thread {request.thread_name}.")
+        return draft_id
+    
+    print("SERVICE: Agent did not produce a draft. No new draft created.")
+    return None
 
 async def get_all_drafts_for_user(user_id: str) -> List[Any]:
     """
@@ -103,56 +145,75 @@ async def delete_draft(request: api_models.APIRejectDraftRequest):
     else:
         print(f"SERVICE: Draft {request.draft_message_id} not found for user {request.user_id}.")
 
-async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedbackRequest) -> str:
+async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedbackRequest) -> Optional[str]:
     """
     Service to create a revised draft based on feedback.
     This logic is based on the reject_draft_sequence_diagram.
     """
     print(f"SERVICE: Processing feedback for draft {request.draft_message_id}")
 
-    # Get the old draft and its thread
+    # 1. Get thread history and the draft that needs revision
     thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
     old_draft = next((msg for msg in thread_messages if msg.id == request.draft_message_id), None)
     if not old_draft:
         raise ValueError(f"Draft {request.draft_message_id} not found")
 
-    # Get or create agent context
+    # 2. Set up the agent to generate a revised draft
     agent_id = old_draft.agent_id or str(uuid.uuid4())
-    agent = await get_agent(request.user_id, agent_id)
-    
-    # Format messages for LLM
-    llm_messages = [
-        {"role": "system", "content": "Revise draft prompt"},  # TODO: Load from file
+
+    # Construct a conversational history for the agent
+    messages = [
+        {"role": "system", "content": "You are an expert assistant. Your goal is to revise a draft based on user feedback. Use the `suggest_draft` tool to provide the new version."},
+        # Add original thread messages
         *[{
             "role": "user" if msg.sender_name != "Agent" else "assistant",
             "content": msg.msg_content
         } for msg in thread_messages if msg.type == MessageType.MESSAGE],
+        # Add the assistant's previous attempt
         {"role": "assistant", "content": old_draft.msg_content},
-        {"role": "user", "content": f"FEEDBACK: {request.feedback}"}
+        # Add the user's feedback
+        {"role": "user", "content": f"Please revise your previous draft based on the following feedback: '{request.feedback}'. Provide a new draft using the `suggest_draft` tool."}
     ]
-
-    # Generate revised draft with LLM
-    revised_content = await get_llm_completion(llm_messages)
-    draft_timestamp = datetime.now()
-    draft_id = create_message_id("Agent", draft_timestamp, revised_content)
-
-    # Delete old draft
-    await remove_message(request.user_id, request.draft_message_id)
-
-    # Store new draft
-    await add_message(
+    
+    agent_results, conversation_history = await run_intelligent_agent(
+        server_url_or_path=f"{os.getenv('BACKEND_BASE_URL')}/mcp",
         user_id=request.user_id,
-        message_id=draft_id,
-        message_type=MessageType.DRAFT,
-        msg_content=revised_content,
-        thread_name=request.thread_name,
-        sender_name="Agent",
-        timestamp=draft_timestamp,
-        agent_id=agent_id
+        agent_id=agent_id,
+        messages=messages
     )
 
-    # Store agent context
-    await upsert_agent(request.user_id, agent_id, llm_messages)
+    # 3. Extract the new draft from the agent's result by checking tool calls
+    revised_content = None
+    if conversation_history:
+        last_message = conversation_history[-1]
+        if last_message.get("role") == "assistant" and last_message.get("tool_calls"):
+            for tool_call in last_message["tool_calls"]:
+                if tool_call.get("function", {}).get("name") == "suggest_draft":
+                    try:
+                        args = json.loads(tool_call["function"]["arguments"])
+                        revised_content = args.get("draft_content")
+                        break
+                    except (json.JSONDecodeError, AttributeError):
+                        print("SERVICE: Could not parse revised draft from tool call arguments.")
 
-    print(f"SERVICE: Created revised draft {draft_id} with agent {agent_id}")
-    return draft_id 
+    # 4. Delete the old draft and store the new one, if it exists
+    if revised_content:
+        draft_timestamp = datetime.now()
+        draft_id = create_message_id("Agent", draft_timestamp, revised_content)
+        await remove_message(request.user_id, request.draft_message_id)
+        await add_message(
+            user_id=request.user_id,
+            message_id=draft_id,
+            message_type=MessageType.DRAFT,
+            msg_content=revised_content,
+            thread_name=request.thread_name,
+            sender_name="Agent",
+            timestamp=draft_timestamp,
+            agent_id=agent_id
+        )
+
+        print(f"SERVICE: Created revised draft {draft_id} with agent {agent_id}")
+        return draft_id
+
+    print(f"SERVICE: Agent did not produce a revised draft for {request.draft_message_id}.")
+    return None 

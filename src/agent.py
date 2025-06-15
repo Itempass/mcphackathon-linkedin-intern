@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from dotenv import load_dotenv
 try:
@@ -151,37 +151,67 @@ class GenericMCPAgent:
             logger.error(error_msg)
             return error_msg
     
-    def _create_system_prompt(self, context: Dict[str, Any]) -> str:
-        """Create system prompt for the LLM based on available tools and context."""
-        tools_desc = "\n".join([
-            f"- {tool['name']}: {tool['description']}" 
-            for tool in self.tools
-        ])
+    def _format_tools_for_llm(self) -> List[Dict[str, Any]]:
+        """
+        Formats the discovered MCP tools and adds internal tools for the LLM.
+        """
+        # Start with MCP tools from the server
+        formatted_tools = []
+        for tool in self.tools:
+            if "name" in tool and "description" in tool and "inputSchema" in tool:
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool["name"],
+                            "description": tool["description"],
+                            "parameters": tool.get("inputSchema", {}),
+                        },
+                    }
+                )
         
-        return f"""You are an AI assistant with access to MCP (Model Context Protocol) tools. Your job is to help the user by intelligently using these tools to gather information and complete tasks.
-
-AVAILABLE TOOLS:
-{tools_desc}
-
-CONTEXT PROVIDED:
-{json.dumps(context, indent=2)}
-
-INSTRUCTIONS:
-1. Analyze the context and determine what the user needs
-2. Use the available tools intelligently to gather information or complete tasks
-3. You can call multiple tools in sequence if needed
-4. Always explain your reasoning before calling tools
-5. Provide a helpful summary of what you discovered
-
-When you want to call a tool, respond with JSON in this format:
-{{"action": "call_tool", "tool": "tool_name", "arguments": {{"arg1": "value1"}}}}
-
-When you're done, respond with:
-{{"action": "complete", "summary": "What you accomplished"}}
-
-Current time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-User ID: {self.user_id}
-"""
+        # Add our internal 'task_completed' tool
+        formatted_tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "task_completed",
+                    "description": "Call this tool to signal that you have successfully completed the user's request. Provide a final summary of the work you did.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "summary": {
+                                "type": "string",
+                                "description": "A concise summary of the results and work performed."
+                            }
+                        },
+                        "required": ["summary"],
+                    },
+                },
+            }
+        )
+        
+        # Add our internal 'suggest_draft' tool
+        formatted_tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "suggest_draft",
+                    "description": "Call this tool to suggest a draft response. This will end the agent's work.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "draft_content": {
+                                "type": "string",
+                                "description": "The content of the draft to be suggested."
+                            }
+                        },
+                        "required": ["draft_content"],
+                    },
+                },
+            }
+        )
+        return formatted_tools
     
     async def _get_llm_decision(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Get decision from LLM about what to do next."""
@@ -189,95 +219,93 @@ User ID: {self.user_id}
             # Fallback to simple heuristic
             return {"action": "call_tool", "tool": self.tools[0]["name"], "arguments": {}}
         
+        # Get tools in the OpenAI-compatible format
+        llm_tools = self._format_tools_for_llm()
+        
         try:
             response = self.llm_client.chat.completions.create(
-                model="anthropic/claude-3.5-sonnet",  # Use a good model from OpenRouter
+                model="anthropic/claude-3.5-sonnet",
                 messages=messages,
-                max_tokens=500,
-                temperature=0.1
+                tools=llm_tools,
+                tool_choice="auto",
             )
             
-            content = response.choices[0].message.content.strip()
-            logger.info(f"LLM response: {content}")
+            response_message = response.choices[0].message
             
-            # Try to parse as JSON
-            try:
-                decision = json.loads(content)
-                logger.info(f"LLM decision: {decision}")
-                return decision
-            except json.JSONDecodeError:
-                # Try to extract JSON from the response (LLM might provide explanation + JSON)
-                import re
-                # Look for JSON that starts with { and contains "action"
-                json_start = content.find('{"action"')
-                if json_start == -1:
-                    json_start = content.find('{ "action"')
-                
-                if json_start != -1:
-                    # Find the matching closing brace
-                    brace_count = 0
-                    json_end = json_start
-                    for i, char in enumerate(content[json_start:], json_start):
-                        if char == '{':
-                            brace_count += 1
-                        elif char == '}':
-                            brace_count -= 1
-                            if brace_count == 0:
-                                json_end = i + 1
-                                break
-                    
-                    try:
-                        json_str = content[json_start:json_end]
-                        decision = json.loads(json_str)
-                        logger.info(f"LLM decision (extracted): {decision}")
-                        return decision
-                    except json.JSONDecodeError:
-                        pass
-                
-                # If not JSON, treat as reasoning and ask for next step
-                logger.info(f"LLM provided reasoning instead of JSON: {content[:200]}...")
+            if response_message.tool_calls:
+                tool_call = response_message.tool_calls[0]
+                tool_name = tool_call.function.name
+                arguments = json.loads(tool_call.function.arguments)
+
+                if tool_name == "task_completed":
+                    return {
+                        "action": "complete",
+                        "summary": arguments.get("summary", "Task completed.")
+                    }
+                elif tool_name == "suggest_draft":
+                    return {
+                        "action": "suggest_draft",
+                        "draft": arguments.get("draft_content", "")
+                    }
+                else:
+                    return {
+                        "action": "call_tool",
+                        "tool": tool_name,
+                        "arguments": arguments
+                    }
+            else:
+                # If the model responds without a tool call, we'll treat it as a final summary.
                 return {
-                    "action": "reasoning", 
-                    "content": content,
-                    "next": "call_tool" if any(tool["name"] in content.lower() for tool in self.tools) else "complete"
+                    "action": "complete",
+                    "summary": response_message.content
                 }
                 
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
-            # Fallback to simple exploration
             return {"action": "call_tool", "tool": self.tools[0]["name"], "arguments": {}}
     
-    async def run_intelligent_agent(self, context: Dict[str, Any], max_iterations: int = 5) -> List[str]:
+    async def run_intelligent_agent(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> Tuple[List[str], List[Dict[str, Any]]]:
         """
         Run the AI agent with intelligent decision-making.
         
         Args:
-            context: Context dictionary with user's request/data
+            messages: The conversation history to start the agent with.
             max_iterations: Maximum number of tool calls to make
             
         Returns:
-            List of results from tool executions
+            A tuple containing:
+            - List of results from tool executions (strings for logging/display)
+            - The final conversation history (list of message dicts)
         """
         if not self.tools:
-            return ["No tools available"]
+            return ["No tools available"], messages
         
+        if not messages:
+            raise ValueError("The 'messages' list cannot be empty.")
+            
         logger.info(f"Starting intelligent exploration with {len(self.tools)} available tools")
         
-        # Initialize conversation with system prompt
-        messages = [
-            {"role": "system", "content": self._create_system_prompt(context)},
-            {"role": "user", "content": f"Please help me with this context: {json.dumps(context)}"}
-        ]
+        # The conversation is now passed in directly.
+        # We make a copy to avoid modifying the caller's list.
+        current_messages = list(messages)
         
         results = []
         
         for iteration in range(max_iterations):
             try:
                 # Get LLM decision
-                decision = await self._get_llm_decision(messages)
+                decision = await self._get_llm_decision(current_messages)
                 
                 if decision.get("action") == "complete":
-                    logger.info(f"Agent completed task: {decision.get('summary', 'No summary')}")
+                    summary = decision.get('summary', 'No summary provided.')
+                    logger.info(f"Agent completed task with summary: {summary}")
+                    results.append(f"✓ Agent Finished: {summary}")
+                    break
+                
+                elif decision.get("action") == "suggest_draft":
+                    draft = decision.get('draft', 'No draft content.')
+                    logger.info(f"Agent suggested a draft: {draft}")
+                    results.append(f"✓ Agent Suggested Draft: {draft}")
                     break
                 
                 elif decision.get("action") == "call_tool":
@@ -285,45 +313,50 @@ User ID: {self.user_id}
                     tool_args = decision.get("arguments", {})
                     
                     if tool_name in self.tool_names:
+                        # Add assistant's thought process to history
+                        current_messages.append({
+                            "role": "assistant",
+                            "content": f"I should call the tool `{tool_name}` with arguments `{json.dumps(tool_args)}`.",
+                            "tool_calls": [{
+                                "id": f"call_{tool_name}",
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name,
+                                    "arguments": json.dumps(tool_args)
+                                }
+                            }]
+                        })
+                        
                         # Execute the tool
                         result = await self.execute_tool(tool_name, tool_args)
                         results.append(result)
                         
-                        # Add to conversation history
-                        messages.append({
-                            "role": "assistant", 
-                            "content": f"I'll call {tool_name} with args {tool_args}"
-                        })
-                        messages.append({
-                            "role": "user", 
-                            "content": f"Tool result: {result}"
+                        # Add tool execution result to history for the next turn
+                        current_messages.append({
+                            "role": "tool",
+                            "tool_call_id": f"call_{tool_name}",
+                            "name": tool_name,
+                            "content": result,
                         })
                         
                     else:
-                        logger.error(f"Unknown tool: {tool_name}")
-                        break
-                
-                elif decision.get("action") == "reasoning":
-                    # LLM is thinking, add to conversation and continue
-                    messages.append({
-                        "role": "assistant",
-                        "content": decision.get("content", "Thinking...")
-                    })
-                    messages.append({
-                        "role": "user",
-                        "content": "Please proceed with your next action."
-                    })
+                        logger.error(f"LLM tried to call an unknown tool: {tool_name}")
+                        # Add error message to history
+                        current_messages.append({
+                            "role": "user",
+                            "content": f"Error: You tried to call a tool named '{tool_name}' which does not exist."
+                        })
                 
                 else:
-                    logger.error(f"Unknown action: {decision.get('action')}")
+                    logger.error(f"LLM returned an unknown action: {decision.get('action')}")
                     break
                     
             except Exception as e:
-                logger.error(f"Tool execution failed: {e}")
+                logger.error(f"Agent loop failed: {e}")
                 break
         
         logger.info(f"Intelligent exploration completed after {len(results)} actions")
-        return results
+        return results, current_messages
 
 
 # Convenience function for simple usage
@@ -331,10 +364,10 @@ async def run_intelligent_agent(
     server_url_or_path: str,
     user_id: str,
     agent_id: str,
-    context: Dict[str, Any],
+    messages: List[Dict[str, Any]],
     max_iterations: int = 5,
     openrouter_api_key: Optional[str] = None
-) -> List[str]:
+) -> Tuple[List[str], List[Dict[str, Any]]]:
     """
     Run an intelligent MCP agent with AI decision-making.
     
@@ -342,41 +375,43 @@ async def run_intelligent_agent(
         server_url_or_path: MCP server URL or path
         user_id: User ID for context
         agent_id: Agent ID for tracking  
-        context: Context dictionary with user's request/data
+        messages: The conversation history to start the agent with.
         max_iterations: Maximum number of tool calls
         openrouter_api_key: OpenRouter API key (optional, uses OPENROUTER_API_KEY env var)
         
     Returns:
-        List of results from tool executions
+        A tuple containing:
+        - List of results from tool executions (strings for logging/display)
+        - The final conversation history (list of message dicts)
     """
     async with GenericMCPAgent(server_url_or_path, user_id, agent_id, openrouter_api_key) as agent:
-        return await agent.run_intelligent_agent(context, max_iterations)
+        return await agent.run_intelligent_agent(messages, max_iterations)
 
 
 # Example usage
 async def main():
     """Example of how to use the Generic MCP Agent."""
     
-    # Example context - this works with ANY MCP server
-    context = {
-        "thread_name": "example_thread",
-        "search_query": "important information",
-        "table_name": "messages",
-        "action": "explore"
-    }
+    # Example messages - this works with ANY MCP server
+    messages = [
+        {"role": "user", "content": "I need help with the 'example_thread'. Please check the 'messages' table and look for 'important information'."}
+    ]
     
     # Run the agent - it will intelligently explore whatever tools are available
-    results = await run_intelligent_agent(
+    results, conversation = await run_intelligent_agent(
         server_url_or_path="http://localhost:8000/mcp", 
         user_id="user123",
         agent_id="agent456", 
-        context=context,
+        messages=messages,
         max_iterations=3
     )
     
     # Process results
     for result in results:
         print(result)
+    
+    print("\n--- Final Conversation ---")
+    print(json.dumps(conversation, indent=2))
 
 
 if __name__ == "__main__":

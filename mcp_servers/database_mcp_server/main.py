@@ -196,8 +196,6 @@ async def get_similar_message(message_id: str, user_id: str = None) -> List[Dict
     
     Args:
         message_id: The ID of the message to find similar messages for
-        user_id: The user ID (required for filtering)
-        top_k: Number of similar messages to return (default: 5)
     
     Returns:
         List of similar messages with similarity scores and metadata

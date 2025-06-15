@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 import json
 from pathlib import Path
 
-from .types import MCPMessage, ToolCall, ToolCallType
+from .mcp_types import MCPMessage, ToolCall, ToolCallType
 from .llm_client import get_llm_completion
 
 class AgentToolCallHandler:

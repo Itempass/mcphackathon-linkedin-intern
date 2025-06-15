@@ -1,8 +1,13 @@
-from fastapi import FastAPI, Response, status, BackgroundTasks, Request
-from . import models, app_services
-from . import background_tasks as tasks
-import httpx
+import sys
 import os
+
+# Add parent directory to Python path so we can use absolute imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from fastapi import FastAPI, Response, status, BackgroundTasks, Request
+from src import models, app_services
+from src import background_tasks as tasks
+import httpx
 
 app = FastAPI()
 
@@ -67,3 +72,9 @@ async def get_draft_messages(user_id: str):
     # Map the internal message models to API models for the response
     api_drafts = [draft.to_api_draft_message() for draft in internal_drafts]
     return models.api_models.APIDraftMessageResponse(draft_messages=api_drafts)
+
+# Run the server directly when script is executed
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)

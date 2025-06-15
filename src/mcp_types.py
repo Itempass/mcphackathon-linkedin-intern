@@ -1,10 +1,10 @@
 """Shared types for the MCP system."""
 
-from enum import Enum
+import enum
 from typing import Optional, Dict, Any
 from src.models.database_models import MessageType
 
-class ToolCallType(Enum):
+class ToolCallType(enum.Enum):
     """Tool call types as shown in the sequence diagrams."""
     SUGGEST_DRAFT = "suggest_draft"
     FIND_SIMILAR_MESSAGES = "find_similar_messages"

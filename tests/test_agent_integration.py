@@ -6,7 +6,7 @@ import json
 from typing import List, Dict
 
 from src.agent_integration import AgentToolCallHandler
-from src.types import MCPMessage, ToolCallType, ToolCall
+from src.mcp_types import MCPMessage, ToolCallType, ToolCall
 from src.models.database_models import MessageType
 
 @pytest.fixture

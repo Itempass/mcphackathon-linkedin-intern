@@ -36,13 +36,15 @@ def read_root():
     return {"status": "ok"}
 
 @app.post("/send-messages/", status_code=status.HTTP_202_ACCEPTED)
-def send_messages(request: models.api_models.APISendMessageRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(tasks.run_thread_processing, request)
+def send_messages(request_body: models.api_models.APISendMessageRequest, request: Request, background_tasks: BackgroundTasks):
+    mcp_clients = request.app.state.mcp_clients
+    background_tasks.add_task(tasks.run_thread_processing, request_body, mcp_clients)
     return {"message": "Message processing started in the background"}
 
 @app.post("/process-feedback/", status_code=status.HTTP_202_ACCEPTED)
-def process_feedback(request: models.api_models.APIProcessFeedbackRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(tasks.run_feedback_processing, request)
+def process_feedback(request_body: models.api_models.APIProcessFeedbackRequest, request: Request, background_tasks: BackgroundTasks):
+    mcp_clients = request.app.state.mcp_clients
+    background_tasks.add_task(tasks.run_feedback_processing, request_body, mcp_clients)
     return {"message": "Feedback processing started in the background"}
 
 @app.post("/reject-draft/", status_code=status.HTTP_200_OK)

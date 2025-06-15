@@ -85,7 +85,7 @@ Here is the conversation history so far:
 Analyze the conversation and suggest a suitable draft."""
             }
         ]
-        
+        print("SERVICE: agent about to start.")
         conversation_history = await run_intelligent_agent(
             mcp_clients=mcp_clients,
             user_id=request.user_id,

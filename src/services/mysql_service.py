@@ -1,5 +1,6 @@
 import os
 import asyncio
+import logging
 from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
@@ -8,11 +9,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete
 import hashlib
 import uuid
+from sqlalchemy.exc import IntegrityError
 
 from src.models.database_models import Base, Message, Agent, MessageType
 
 # Load environment variables
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Database configuration
 db_url = os.environ.get("MYSQL_DB")
@@ -230,9 +234,33 @@ async def add_message(
         )
         
         session.add(message)
-        await session.commit()
-        await session.refresh(message)
-        return message
+        try:
+            await session.commit()
+            await session.refresh(message)
+            return message
+        except IntegrityError as e:
+            # Handle duplicate key error
+            await session.rollback()
+            
+            # Check if the existing message is actually the same one we're trying to insert
+            existing_message = await get_message(user_id, message_id)
+            if existing_message:
+                # Verify it's the exact same message (content, thread, sender match)
+                if (existing_message.msg_content == msg_content and 
+                    existing_message.thread_name == thread_name and 
+                    existing_message.sender_name == sender_name and
+                    existing_message.type == message_type):
+                    # This is a duplicate insertion of the same message - return the existing one
+                    logger.info(f"Message {message_id} already exists with same content - returning existing message")
+                    return existing_message
+                else:
+                    # Same ID but different content - this is a real collision
+                    logger.error(f"Message ID collision detected: {message_id} exists with different content")
+                    raise ValueError(f"Message ID collision: {message_id} already exists with different content")
+            else:
+                # Some other integrity error
+                logger.error(f"Failed to add message {message_id}: {e}")
+                raise e
 
 # Utility functions for creating IDs (same as in setup script)
 def create_message_id(sender_name: str, timestamp: datetime, content: str) -> str:

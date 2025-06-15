@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 
 from fastmcp import FastMCP
 # Note: Corrected the import path to be relative to the project root
-from mcp_servers.google_sheet_mcp_server.sheets_client import get_gsheets_client, sheet_to_markdown, update_cell, update_row
+from mcp_servers.google_sheet_mcp_server.sheets_client import get_gsheets_client, sheet_to_markdown, update_cell, update_sheet_row
 
 # --- Configuration ---
 load_dotenv(override=True)
@@ -71,7 +71,7 @@ async def update_row(first_cell: str, values: list[str], user_id: str=None) -> D
     print(f"Updating row starting at {first_cell} with values {values}")
     worksheet = get_worksheet()
     # The underlying function is synchronous, but FastMCP can handle it.
-    return update_row(worksheet, first_cell, values)
+    return update_sheet_row(worksheet, first_cell, values)
 
 # --- Server Execution ---
 if __name__ == "__main__":

@@ -56,10 +56,11 @@ def update_cell(worksheet: gspread.Worksheet, cell_id: str, value: str):
     """
     Updates a single cell in the worksheet.
     """
-    worksheet.update(cell_id, value)
+    # gspread expects a 2D list for the values parameter.
+    worksheet.update(cell_id, [[value]])
     return {"status": "success", "message": f"Cell {cell_id} updated."}
 
-def update_row(worksheet: gspread.Worksheet, start_cell: str, values: list[str]):
+def update_sheet_row(worksheet: gspread.Worksheet, start_cell: str, values: list[str]):
     """
     Updates a row in the worksheet with a list of values, starting from start_cell.
     """
@@ -105,7 +106,7 @@ if __name__ == '__main__':
 
         # --- Example of updating a row ---
         print("\n--- Updating Row 3 ---")
-        row_update_result = update_row(sheet, "A3", ["This", "is", "a", "new", "row!"])
+        row_update_result = update_sheet_row(sheet, "A3", ["This", "is", "a", "new", "row!"])
         print(row_update_result)
 
         # --- Verify the update by reading again ---

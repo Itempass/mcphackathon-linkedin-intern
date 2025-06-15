@@ -22,7 +22,7 @@ class Message(Base):
     # id: hash of sender_date, timestamp, content
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     # user_id: hash of user name
-    user_id: Mapped[str] = mapped_column(String(255))
+    user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     # msg_content: String
     msg_content: Mapped[str] = mapped_column(Text)
     # type: MessageType

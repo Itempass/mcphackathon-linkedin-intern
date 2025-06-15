@@ -224,13 +224,6 @@ async def add_message(
     """
     logger.debug(f"Adding message {message_id} for user {user_id}, thread {thread_name}, sender {sender_name}")
     
-    # Check if message already exists first
-    existing_message = await get_message(user_id, message_id)
-    if existing_message:
-        logger.info(f"Message {message_id} already exists, returning existing message")
-        return existing_message
-    
-    # Message doesn't exist, so insert it
     async with AsyncSessionLocal() as session:
         message = Message(
             id=message_id,
@@ -250,16 +243,11 @@ async def add_message(
             logger.debug(f"Successfully added message {message_id}")
             return message
         except IntegrityError:
-            # Race condition: someone else inserted it between our check and insert
-            logger.info(f"Race condition detected for message {message_id}, returning existing message")
+            # Message already exists for this user - just return the existing one
+            logger.info(f"Message {message_id} already exists for user {user_id}, returning existing message")
             await session.rollback()
             existing_message = await get_message(user_id, message_id)
-            if existing_message:
-                return existing_message
-            else:
-                # This really shouldn't happen, but if it does, re-raise
-                logger.error(f"Integrity error but no existing message found for {message_id}")
-                raise
+            return existing_message
 
 # Utility functions for creating IDs (same as in setup script)
 def create_message_id(sender_name: str, timestamp: datetime, content: str) -> str:

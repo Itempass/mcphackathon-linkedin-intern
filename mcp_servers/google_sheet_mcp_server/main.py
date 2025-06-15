@@ -59,7 +59,7 @@ async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict
 if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     # Define a specific port for this server to avoid conflicts, with a default
-    port = int(os.environ.get("MCP_GSHEETS_SERVERPORT", "8001"))
+    port = int(os.environ.get("MCP_GSHEETS_SERVERPORT", "8002"))
     
     print(f"🚀 Starting FastMCP Google Sheets Server on http://{host}:{port}/mcp")
     mcp.run(transport="streamable-http", host=host, port=port, path="/mcp") 

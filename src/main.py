@@ -11,16 +11,49 @@ import httpx
 
 app = FastAPI()
 
-# MCP Reverse Proxy
-@app.api_route("/mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def mcp_proxy(request: Request, path: str):
-    """Proxy requests to the MCP server running on port specified by MCP_DB_SERVERPORT env var"""
+# MCP Reverse Proxy for Database MCP Server
+@app.api_route("/db-mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def db_mcp_proxy(request: Request, path: str):
+    """Proxy requests to the Database MCP server running on port specified by MCP_DB_SERVERPORT env var"""
     # Configure timeout for MCP server requests (30 seconds total, 10 seconds connect)
     timeout = httpx.Timeout(30.0, connect=10.0)
     
     async with httpx.AsyncClient(timeout=timeout) as client:
         # Get MCP server port from environment variable
         mcp_port = os.getenv("MCP_DB_SERVERPORT")
+        
+        # Forward the request to the internal MCP server
+        url = f"http://localhost:{mcp_port}/mcp/{path}"
+        
+        # Get request body if present
+        body = await request.body()
+        
+        # Forward the request
+        response = await client.request(
+            method=request.method,
+            url=url,
+            headers=dict(request.headers),
+            content=body,
+            params=dict(request.query_params)
+        )
+        
+        # Return the response
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
+
+# MCP Reverse Proxy for Google Sheets MCP Server
+@app.api_route("/gsheet-mcp/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def gsheet_mcp_proxy(request: Request, path: str):
+    """Proxy requests to the Google Sheets MCP server running on port specified by MCP_GSHEETS_SERVERPORT env var"""
+    # Configure timeout for MCP server requests (30 seconds total, 10 seconds connect)
+    timeout = httpx.Timeout(30.0, connect=10.0)
+    
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        # Get MCP server port from environment variable
+        mcp_port = os.getenv("MCP_GSHEETS_SERVERPORT")
         
         # Forward the request to the internal MCP server
         url = f"http://localhost:{mcp_port}/mcp/{path}"

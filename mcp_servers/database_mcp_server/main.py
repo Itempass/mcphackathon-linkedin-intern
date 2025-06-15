@@ -198,7 +198,7 @@ async def get_similar_message(message_id: str, user_id: str = None) -> List[Dict
         message_id: The ID of the message to find similar messages for
     
     Returns:
-        List of similar messages with similarity scores and metadata
+        List of similar messages
     """
     top_k = 10
 
@@ -230,6 +230,48 @@ async def get_similar_message(message_id: str, user_id: str = None) -> List[Dict
         }
         results.append(result)
     
+    return results
+
+@mcp.tool(exclude_args=["user_id"])
+async def get_thread_by_message_id(message_id: str, user_id: str = None) -> List[Dict[str, Any]]:
+    """
+    Get all messages in a thread, identified by a single message_id in that thread.
+
+    Args:
+        message_id: The ID of one message in the desired thread.
+
+    Returns:
+        A list of all messages in the thread, sorted by timestamp.
+    """
+    if user_id is None:
+        raise ValueError("user_id is required")
+
+    # 1. Get the message to find the thread_name
+    message = await get_message(user_id, message_id)
+    if not message:
+        raise ValueError(f"Message with ID '{message_id}' not found for user '{user_id}'")
+
+    thread_name = message.thread_name
+
+    # 2. Get all messages from that thread
+    thread_messages = await get_all_messages_of_thread(user_id, thread_name)
+
+    # Sort messages by timestamp to maintain conversational order
+    thread_messages.sort(key=lambda m: m.timestamp)
+
+    # 3. Format messages into a list of dicts
+    results = []
+    for msg in thread_messages:
+        results.append({
+            "id": msg.id,
+            "msg_content": msg.msg_content,
+            "type": msg.type.name if msg.type else None,
+            "thread_name": msg.thread_name,
+            "sender_name": msg.sender_name,
+            "timestamp": msg.timestamp.isoformat(),
+            "agent_id": msg.agent_id,
+        })
+
     return results
 
 # --- Server Execution ---

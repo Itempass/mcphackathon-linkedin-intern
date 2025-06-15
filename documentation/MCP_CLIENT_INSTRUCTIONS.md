@@ -60,7 +60,7 @@ from fastmcp import Client
 
 # Connect to the MCP server
 base_url = os.getenv("BACKEND_BASE_URL")
-client = Client(f"{base_url}/mcp")
+client = Client(f"{base_url}db-mcp")
 
 async def main():
     async with client:
@@ -122,7 +122,7 @@ from fastmcp import Client
 
 async def explore_database():
     base_url = os.getenv("BACKEND_BASE_URL")
-    client = Client(f"{base_url}/mcp")
+    client = Client(f"{base_url}/db-mcp")
     
     async with client:
         # Get all tables

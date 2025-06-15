@@ -25,6 +25,9 @@ RUN echo '#!/bin/bash\n\
 echo "Starting Database MCP Server in background..."\n\
 cd /app/mcp_servers/database_mcp_server && python main.py &\n\
 \n\
+echo "Starting Google Sheets MCP Server in background..."\n\
+cd /app/mcp_servers/google_sheet_mcp_server && python main.py &\n\
+\n\
 echo "Starting main FastAPI backend..."\n\
 cd /app && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000} &\n\
 \n\
@@ -34,10 +37,11 @@ wait' > /app/start.sh && chmod +x /app/start.sh
 # Set environment variables with defaults
 ENV PORT=8000
 ENV MCP_DB_SERVERPORT=8001
+ENV MCP_GSHEETS_SERVERPORT=8002
 ENV BACKEND_BASE_URL=http://localhost
 
-# Expose both ports
-EXPOSE 8000 8001
+# Expose all necessary ports
+EXPOSE 8000 8001 8002
 
 # Start both services
 CMD ["/app/start.sh"] 

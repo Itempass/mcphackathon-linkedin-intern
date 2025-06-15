@@ -97,15 +97,15 @@ Here is the conversation history so far:
 ---
 
 Analyze the conversation and suggest a suitable draft."""
-            }
-        ]
-        
-        conversation_history = await run_intelligent_agent(
-            server_url_or_path=f"{os.getenv('BACKEND_BASE_URL')}/mcp",
-            user_id=request.user_id,
-            agent_id=agent_id,
-            messages=messages
-        )
+        }
+    ]
+    
+    conversation_history = await run_intelligent_agent(
+        server_urls=[f"{os.getenv('BACKEND_BASE_URL')}/db-mcp", f"{os.getenv('BACKEND_BASE_URL')}/gsheet-mcp"],
+        user_id=request.user_id,
+        agent_id=agent_id,
+        messages=messages
+    )
 
         # Extract draft from the agent's final action by checking for a specific tool call
         draft_content = None
@@ -224,26 +224,26 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
         # 2. Set up the agent to generate a revised draft
         agent_id = old_draft.agent_id or str(uuid.uuid4())
 
-        # Construct a conversational history for the agent
-        messages = [
-            {"role": "system", "content": "You are an expert assistant. Your goal is to revise a draft based on user feedback. Use the `suggest_draft` tool to provide the new version."},
-            # Add original thread messages
-            *[{
-                "role": "user" if msg.sender_name != "Agent" else "assistant",
-                "content": msg.msg_content
-            } for msg in thread_messages if msg.type == MessageType.MESSAGE],
-            # Add the assistant's previous attempt
-            {"role": "assistant", "content": old_draft.msg_content},
-            # Add the user's feedback
-            {"role": "user", "content": f"Please revise your previous draft based on the following feedback: '{request.feedback}'. Provide a new draft using the `suggest_draft` tool."}
-        ]
-        
-        conversation_history = await run_intelligent_agent(
-            server_url_or_path=f"{os.getenv('BACKEND_BASE_URL')}/mcp",
-            user_id=request.user_id,
-            agent_id=agent_id,
-            messages=messages
-        )
+    # Construct a conversational history for the agent
+    messages = [
+        {"role": "system", "content": "You are an expert assistant. Your goal is to revise a draft based on user feedback. Use the `suggest_draft` tool to provide the new version."},
+        # Add original thread messages
+        *[{
+            "role": "user" if msg.sender_name != "Agent" else "assistant",
+            "content": msg.msg_content
+        } for msg in thread_messages if msg.type == MessageType.MESSAGE],
+        # Add the assistant's previous attempt
+        {"role": "assistant", "content": old_draft.msg_content},
+        # Add the user's feedback
+        {"role": "user", "content": f"Please revise your previous draft based on the following feedback: '{request.feedback}'. Provide a new draft using the `suggest_draft` tool."}
+    ]
+    
+    conversation_history = await run_intelligent_agent(
+        server_urls=[f"{os.getenv('BACKEND_BASE_URL')}/db-mcp", f"{os.getenv('BACKEND_BASE_URL')}/gsheet-mcp"],
+        user_id=request.user_id,
+        agent_id=agent_id,
+        messages=messages
+    )
 
         # 3. Extract the new draft from the agent's result by checking tool calls
         revised_content = None

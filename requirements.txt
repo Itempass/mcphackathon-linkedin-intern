@@ -12,3 +12,6 @@ SQLAlchemy
 aiomysql
 python-dotenv 
 greenlet
+gspread
+pandas
+google-auth

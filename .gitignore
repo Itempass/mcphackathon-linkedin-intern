@@ -196,4 +196,3 @@ cython_debug/
 .cursorindexingignore
 
 # Credentials
-mcp_servers/google_sheet_mcp_server/credentials.json

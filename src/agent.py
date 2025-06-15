@@ -14,8 +14,14 @@ import os
 from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
 from dotenv import load_dotenv
-from fastmcp import Client
-from fastmcp.exceptions import ClientError
+try:
+    from fastmcp import Client
+    from fastmcp.exceptions import ClientError
+except ImportError:
+    # For testing without FastMCP
+    Client = object
+    class ClientError(Exception):
+        pass
 
 # OpenRouter integration using modern OpenAI client
 from openai import OpenAI
@@ -29,25 +35,25 @@ class GenericMCPAgent:
     AI-powered MCP Agent that uses an LLM to intelligently decide which tools to call.
     
     Features:
-    - Uses a shared, persistent connection to MCP servers
+    - Dynamic MCP tool discovery via FastMCP
     - LLM-driven decision making
     - Multi-step reasoning and tool execution
     - Automatic user context injection
     """
     
-    def __init__(self, clients: Dict[str, Client], user_id: str, agent_id: str, openrouter_api_key: Optional[str] = None):
+    def __init__(self, clients: List[Client], user_id: str, agent_id: str, openrouter_api_key: Optional[str] = None):
         """
-        Initialize the AI-powered MCP agent with existing client connections.
+        Initialize the AI-powered MCP agent.
         
         Args:
-            clients: A dictionary of pre-connected FastMCP.Client objects
+            clients: A list of pre-initialized FastMCP Client objects.
             user_id: User ID for context
             agent_id: Agent ID for tracking
             openrouter_api_key: OpenRouter API key (optional, uses env var if not provided)
         """
+        self.clients = clients
         self.user_id = user_id
         self.agent_id = agent_id
-        self.clients = list(clients.values())
         self.tools: List[Dict[str, Any]] = []
         self.conversation_history: List[Dict[str, Any]] = []
         
@@ -62,34 +68,36 @@ class GenericMCPAgent:
         else:
             self.has_llm = False
             logger.warning("No OpenRouter API key - agent will run in basic mode")
-
+    
     async def discover_tools(self):
-        """
-        Discovers available tools from the connected MCP clients.
-        This should be called after the agent is initialized.
-        """
+        """Connect temporarily to discover tools from all clients."""
+        all_tools = []
         for client in self.clients:
             try:
-                tools_raw = await client.list_tools()
-                
-                # Get current tool names to check for duplicates
-                current_tool_names = self.tool_names
-
-                # Convert Tool objects to dictionaries and store with client
-                for tool in tools_raw:
-                    if tool.name in current_tool_names:
-                        logger.warning(f"Duplicate tool name '{tool.name}' found. The first one discovered will be used.")
+                # Use a short-lived connection for discovery
+                async with client:
+                    tools_raw = await client.list_tools()
                     
-                    self.tools.append({
-                        "name": tool.name,
-                        "description": tool.description or "",
-                        "inputSchema": tool.inputSchema or {},
-                        "client": client  # Associate tool with its client
-                    })
+                    # Get current tool names to check for duplicates
+                    current_tool_names = [t["name"] for t in all_tools]
+
+                    # Convert Tool objects to dictionaries and store with client
+                    for tool in tools_raw:
+                        if tool.name in current_tool_names:
+                            logger.warning(f"Duplicate tool name '{tool.name}' found. The first one discovered will be used.")
+                            continue # Skip duplicate
+                        
+                        all_tools.append({
+                            "name": tool.name,
+                            "description": tool.description or "",
+                            "inputSchema": tool.inputSchema or {},
+                            "client": client  # Associate tool with its client
+                        })
             except Exception as e:
-                logger.error(f"Failed to discover tools for client connected to {client.server_url}: {e}")
-        
-        logger.info(f"Agent initialized with {len(self.tools)} tools from {len(self.clients)} clients.")
+                logger.error(f"Failed to discover tools for client {client.server_url}: {e}")
+
+        self.tools = all_tools
+        logger.info(f"Tool discovery complete: {len(self.tools)} tools found across {len(self.clients)} clients.")
 
     def describe_capabilities(self) -> Dict[str, Any]:
         """Describe agent capabilities for external inspection."""
@@ -116,7 +124,7 @@ class GenericMCPAgent:
             Formatted result string
         """
         if not self.clients:
-            raise RuntimeError("Agent not initialized correctly - no clients found.")
+            raise RuntimeError("Agent not connected - use async context manager")
             
         # Find the tool and its associated client
         tool_to_execute = None
@@ -137,7 +145,9 @@ class GenericMCPAgent:
         args["user_id"] = self.user_id
         
         try:
-            result = await client.call_tool(tool_name, args)
+            # Use a short-lived connection for the actual tool call
+            async with client:
+                result = await client.call_tool(tool_name, args)
             
             # FastMCP returns a list of TextContent objects
             if result and hasattr(result[0], 'text'):
@@ -151,8 +161,8 @@ class GenericMCPAgent:
             logger.error(error_msg)
             return error_msg
         except Exception as e:
-            error_msg = f"✗ {tool_name}: Unexpected error: {e}"
-            logger.error(error_msg)
+            error_msg = f"✗ {tool_name}: Unexpected error during tool call '{tool_name}': {e}"
+            logger.error(error_msg, exc_info=True)
             return error_msg
     
     def _format_tools_for_llm(self) -> List[Dict[str, Any]]:
@@ -223,103 +233,87 @@ class GenericMCPAgent:
             # Fallback to simple heuristic
             return {"action": "call_tool", "tool": self.tools[0]["name"], "arguments": {}}
         
-        formatted_tools = self._format_tools_for_llm()
+        # Prepare the conversation for the LLM
+        llm_messages = [
+            {"role": "system", "content": "You are a helpful AI assistant."}
+        ]
+        llm_messages.extend(messages)
         
-        # Add a timestamp to the conversation history to know when the interaction started
-        self.conversation_history.append({"role": "system", "content": f"Interaction started at {datetime.now().isoformat()}"})
+        logger.info(f"🤖 Getting LLM decision with {len(llm_messages)} messages and {len(self.tools)} tools...")
         
-        try:
-            response = self.llm_client.chat.completions.create(
-                model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o"),
-                messages=messages,
-                tools=formatted_tools,
-                tool_choice="auto",
-            )
-            
-            response_message = response.choices[0].message
-            return response_message
-            
-        except Exception as e:
-            logger.error(f"Error getting LLM decision: {e}")
-            return {"action": "error", "details": str(e)}
-
-    async def run(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> List[Dict[str, Any]]:
+        # Get response from OpenRouter
+        response = self.llm_client.chat.completions.create(
+            model=os.getenv("OPENROUTER_MODEL", "anthropic/claude-3-haiku-20240307"),
+            messages=llm_messages,
+            tools=self._format_tools_for_llm(),
+            tool_choice="auto",
+        )
+        
+        return response.choices[0].message
+    
+    async def run_intelligent_agent(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> List[Dict[str, Any]]:
         """
-        Main agent loop for processing a conversation and executing tools.
-        
-        Args:
-            messages: The initial messages in the conversation.
-            max_iterations: The maximum number of tool calls to prevent infinite loops.
-            
-        Returns:
-            The complete conversation history.
+        The main loop for the agent to process a conversation.
         """
-        self.conversation_history = messages
+        self.conversation_history = list(messages)
         
         for i in range(max_iterations):
-            print(f"--- Agent Iteration {i+1} ---")
+            logger.info(f"--- Agent Iteration {i+1}/{max_iterations} ---")
             
-            # Get the LLM's decision on what to do next
-            llm_response = await self._get_llm_decision(self.conversation_history)
+            # Get LLM decision
+            assistant_response = await self._get_llm_decision(self.conversation_history)
             
             # If the model wants to call a tool
-            if llm_response.tool_calls:
-                self.conversation_history.append(llm_response) # Add assistant's tool request
+            if assistant_response.tool_calls:
+                # Add the assistant's response to history
+                self.conversation_history.append(assistant_response)
                 
                 # Execute all tool calls
-                tool_outputs = []
-                for tool_call in llm_response.tool_calls:
+                for tool_call in assistant_response.tool_calls:
                     tool_name = tool_call.function.name
                     
-                    # Handle internal 'task_completed' tool
+                    # Handle our internal 'task_completed' tool
                     if tool_name == "task_completed":
-                        print("Agent completed the task.")
-                        # End the loop by returning the history
+                        logger.info("✅ Agent signaled task completion.")
                         return self.conversation_history
-                    
-                    # Handle internal 'suggest_draft' tool
+                    # Handle our internal 'suggest_draft' tool
                     if tool_name == "suggest_draft":
-                        print("Agent suggested a draft.")
-                        # End the loop, the service layer will handle the draft
+                        logger.info("✅ Agent suggested a draft. Ending execution.")
                         return self.conversation_history
-
+                        
                     try:
                         arguments = json.loads(tool_call.function.arguments)
-                        print(f"Tool Call: {tool_name}({arguments})")
-                        
-                        # Execute the tool and get the result
-                        tool_result = await self.execute_tool(tool_name, arguments)
-                        
-                        tool_outputs.append({
+                        logger.info(f"Tool call: {tool_name}({arguments})")
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to decode arguments for tool {tool_name}: {tool_call.function.arguments}")
+                        tool_result = f"Error: Invalid JSON arguments for {tool_name}"
+                        arguments = {} # Set empty dict to avoid breaking downstream
+                    
+                    # Execute the tool and get the result
+                    tool_result = await self.execute_tool(tool_name, arguments)
+                    
+                    # Add the tool result to the conversation history
+                    self.conversation_history.append(
+                        {
                             "tool_call_id": tool_call.id,
                             "role": "tool",
                             "name": tool_name,
                             "content": tool_result,
-                        })
-
-                    except json.JSONDecodeError:
-                        error_msg = f"Error: Invalid JSON arguments for tool {tool_name}."
-                        print(error_msg)
-                        tool_outputs.append({
-                            "tool_call_id": tool_call.id,
-                            "role": "tool",
-                            "name": tool_name,
-                            "content": error_msg,
-                        })
-                
-                self.conversation_history.extend(tool_outputs) # Add tool results to history
-
-            # If the model returns a standard message, the conversation is over
+                        }
+                    )
+            
+            # If the model returns a regular message, it's the final answer
             else:
-                self.conversation_history.append(llm_response)
-                print("--- Agent Finished ---")
-                break
-                
+                logger.info("🤖 LLM provided a final answer.")
+                self.conversation_history.append(assistant_response)
+                return self.conversation_history
+
+        logger.warning("Agent reached max iterations. Returning conversation history.")
         return self.conversation_history
 
 
 async def run_intelligent_agent(
-    mcp_clients: Dict[str, Client],
+    mcp_clients: List[Client],
     user_id: str,
     agent_id: str,
     messages: List[Dict[str, Any]],
@@ -327,68 +321,51 @@ async def run_intelligent_agent(
     openrouter_api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    High-level function to run the agent with shared clients.
-    
+    High-level function to create, setup, and run the intelligent agent.
+
     Args:
-        mcp_clients: A dictionary of pre-connected FastMCP.Client objects.
+        mcp_clients: A list of pre-initialized FastMCP Client objects.
         user_id: The user's ID.
         agent_id: The agent's ID for this run.
         messages: The initial conversation messages.
-        max_iterations: Max number of agent iterations.
-        openrouter_api_key: OpenRouter API key.
+        max_iterations: The maximum number of LLM <-> tool loops.
+        openrouter_api_key: The OpenRouter API key.
         
     Returns:
-        The full conversation history.
+        The complete conversation history.
     """
-    # Initialize the agent with the shared clients
     agent = GenericMCPAgent(mcp_clients, user_id, agent_id, openrouter_api_key)
     
-    # Discover the tools from the connected clients
+    # Discover tools using short-lived connections
     await agent.discover_tools()
     
-    # Run the agent's main processing loop
-    conversation_history = await agent.run(messages, max_iterations)
+    # Run the main agent loop
+    conversation_history = await agent.run_intelligent_agent(messages, max_iterations)
     
     return conversation_history
 
 
+# Example usage
 async def main():
-    """
-    Example of how to run the agent directly.
-    This requires MCP servers to be running.
-    """
-    # In a real app, these clients would be created at startup and passed in.
-    db_mcp_url = "http://localhost:8001/mcp"
-    gsheet_mcp_url = "http://localhost:8002/mcp"
-
-    db_client = Client(db_mcp_url)
-    gsheet_client = Client(gsheet_mcp_url)
-
-    # Manually manage client connections for this standalone example
-    await db_client.__aenter__()
-    await gsheet_client.__aenter__()
+    """Example of how to use the Generic MCP Agent."""
     
-    clients = {"db": db_client, "gsheet": gsheet_client}
+    # Example messages - this works with ANY MCP server
+    messages = [
+        {"role": "user", "content": "I need help with the 'example_thread'. Please check the 'messages' table and look for 'important information'."}
+    ]
     
-    try:
-        # Example: Ask the agent to read the sheet and summarize it
-        user_id = "test_user"
-        agent_id = "test_agent"
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant. Use the available tools to answer the user's question."},
-            {"role": "user", "content": "Please read the Google Sheet and tell me what's in cell A1."}
-        ]
-        
-        conversation = await run_intelligent_agent(clients, user_id, agent_id, messages)
-        
-        print("\n--- Final Conversation History ---")
-        for message in conversation:
-            print(message)
-            
-    finally:
-        # Clean up connections
-        await db_client.__aexit__(None, None, None)
-        await gsheet_client.__aexit__(None, None, None)
+    # Run the agent - it will intelligently explore whatever tools are available
+    final_conversation = await run_intelligent_agent(
+        mcp_clients=[Client("http://localhost:8001/db-mcp")], 
+        user_id="user123",
+        agent_id="agent456", 
+        messages=messages,
+        max_iterations=3
+    )
+    
+    print("\n--- Final Conversation ---")
+    print(json.dumps(final_conversation, indent=2))
+
 
 if __name__ == "__main__":
     asyncio.run(main()) 

@@ -1,51 +1,31 @@
 import sys
 import os
+from contextlib import asynccontextmanager
 
 # Add parent directory to Python path so we can use absolute imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from fastapi import FastAPI, Response, status, BackgroundTasks, Request
-from contextlib import asynccontextmanager
-from fastmcp import Client
-from src import models, app_services, app_state
+from src import models, app_services
 from src import background_tasks as tasks
 import httpx
+from fastmcp import Client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic
-    print("🚀 Application startup: Initializing MCP clients...")
+    # Create the MCP clients on startup
+    print("🚀 Starting up and creating MCP Clients...")
+    db_mcp_url = f"{os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')}/db-mcp"
+    gsheet_mcp_url = f"{os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')}/gsheet-mcp"
     
-    # These URLs should point to the reverse proxy endpoints on this server.
-    # The base URL should be the address of this main backend service.
-    backend_url = os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')
-    db_mcp_url = f"{backend_url}/db-mcp"
-    gsheet_mcp_url = f"{backend_url}/gsheet-mcp"
-    
-    db_client = Client(db_mcp_url)
-    gsheet_client = Client(gsheet_mcp_url)
-    
-    try:
-        # Asynchronously connect the clients
-        await db_client.__aenter__()
-        await gsheet_client.__aenter__()
-        
-        # Store clients in the shared state
-        app_state.mcp_clients["db"] = db_client
-        app_state.mcp_clients["gsheet"] = gsheet_client
-        
-        print(f"✅ MCP clients connected and ready: {list(app_state.mcp_clients.keys())}")
-        
-        yield # The application is now running
-        
-    finally:
-        # Shutdown logic
-        print("🔌 Application shutdown: Closing MCP clients...")
-        for client in app_state.mcp_clients.values():
-            # Ensure the client has an active session before trying to close it
-            if client.session:
-                await client.__aexit__(None, None, None)
-        print("MCP clients closed.")
+    app.state.mcp_clients = [
+        Client(db_mcp_url),
+        Client(gsheet_mcp_url)
+    ]
+    print(f"✅ MCP Clients created for URLs: {db_mcp_url}, {gsheet_mcp_url}")
+    yield
+    # No specific cleanup needed for Client objects themselves
+    print("ℹ️ Shutting down.")
 
 app = FastAPI(lifespan=lifespan)
 

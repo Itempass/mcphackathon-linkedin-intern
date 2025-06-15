@@ -7,7 +7,6 @@ import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 import os
-from fastmcp import Client
 
 from src.models import api_models
 from src.models.database_models import MessageType
@@ -15,7 +14,7 @@ from src.models.internal_models import InternalMessage
 from src.services.mysql_service import *
 from src.agent import run_intelligent_agent
 
-async def process_thread_and_create_draft(request: api_models.APISendMessageRequest, mcp_clients: Dict[str, Client]) -> Optional[str]:
+async def process_thread_and_create_draft(request: api_models.APISendMessageRequest) -> Optional[str]:
     """
     Service to handle processing a thread of messages, storing new ones,
     invalidating old drafts, and creating a new draft using the LLM.
@@ -83,6 +82,9 @@ Here is the conversation history so far:
 Analyze the conversation and suggest a suitable draft."""
         }
     ]
+    
+    # Get shared clients from the app state
+    mcp_clients = request.app.state.mcp_clients
     
     conversation_history = await run_intelligent_agent(
         mcp_clients=mcp_clients,
@@ -188,7 +190,7 @@ async def delete_draft(request: api_models.APIRejectDraftRequest):
     else:
         print(f"SERVICE: Draft {request.draft_message_id} not found for user {request.user_id}.")
 
-async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedbackRequest, mcp_clients: Dict[str, Client]) -> Optional[str]:
+async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedbackRequest) -> Optional[str]:
     """
     Service to create a revised draft based on feedback.
     This logic is based on the reject_draft_sequence_diagram.
@@ -222,6 +224,9 @@ async def create_revised_draft_from_feedback(request: api_models.APIProcessFeedb
         # Add the user's feedback
         {"role": "user", "content": f"Please revise your previous draft based on the following feedback: '{request.feedback}'. Provide a new draft using the `suggest_draft` tool."}
     ]
+    
+    # Get shared clients from the app state
+    mcp_clients = request.app.state.mcp_clients
     
     conversation_history = await run_intelligent_agent(
         mcp_clients=mcp_clients,

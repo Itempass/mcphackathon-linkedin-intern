@@ -29,7 +29,7 @@ async def test_basic_connection():
         logger.info("Please set it like: export BACKEND_BASE_URL=http://localhost:8000")
         return
     
-    mcp_url = f"{backend_url}/mcp"
+    mcp_url = f"{backend_url}/db-mcp"
     logger.info(f"Testing connection to MCP server at: {mcp_url}")
     
     try:
@@ -64,7 +64,7 @@ async def test_tool_execution():
         logger.error("BACKEND_BASE_URL environment variable not set!")
         return
         
-    mcp_url = f"{backend_url}/mcp"
+    mcp_url = f"{backend_url}/db-mcp"
     
     try:
         async with GenericMCPAgent(mcp_url, "test_user", "test_agent") as agent:
@@ -92,34 +92,26 @@ async def test_agent_loop():
         logger.error("BACKEND_BASE_URL environment variable not set!")
         return
         
-    mcp_url = f"{backend_url}/mcp"
+    mcp_url = f"{backend_url}/db-mcp"
     
     logger.info("Testing intelligent exploration...")
     
-    # Context that works with any MCP server
-    test_context = {
-        "thread_name": "test_thread_123",
-        "search_query": "test query",
-        "table_name": "messages",
-        "message_id": "06367a0fa58905d24afa432b4a186a95",
-        "user_id": "fb202dd1-8fd2-41e0-8532-8d714d024151",
-        "action": "explore"
-    }
+    # A simple, universal prompt that should work with any tool set
+    messages = [
+        {"role": "user", "content": "Please perform a simple test of your capabilities."}
+    ]
     
     try:
         results = await run_intelligent_agent(
-            server_url_or_path=mcp_url,
+            server_urls=mcp_url,
             user_id="fb202dd1-8fd2-41e0-8532-8d714d024151",
             agent_id="test_agent_456",
-            context=test_context,
+            messages=messages,
             max_iterations=3  # Keep it short for testing
         )
         
-        logger.info(f"✓ Intelligent exploration completed with {len(results)} tool executions:")
+        logger.info(f"✓ Intelligent exploration completed. Final conversation length: {len(results)}")
         
-        for i, result in enumerate(results, 1):
-            logger.info(f"  {i}. {result}")
-                
     except Exception as e:
         logger.error(f"✗ Intelligent exploration test failed: {e}")
 
@@ -163,7 +155,7 @@ if __name__ == "__main__":
         exit(1)
     
     print(f"\n🚀 Starting MCP Agent tests...")
-    print(f"📡 MCP Server: {backend_url}/mcp")
+    print(f"📡 MCP Server: {backend_url}/db-mcp")
     print()
     
     try:

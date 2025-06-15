@@ -29,8 +29,8 @@ def get_worksheet():
 
 # --- Tools ---
 
-@mcp.tool()
-async def read_sheet() -> str:
+@mcp.tool(exclude_args=["user_id"])
+async def read_sheet(user_id: str=None) -> str:
     """
     Reads the entire content of the Google Sheet and returns it as a markdown table.
     Each cell in the markdown table is prefixed with its cell ID (e.g., [A1]).
@@ -38,9 +38,9 @@ async def read_sheet() -> str:
     worksheet = get_worksheet()
     # The underlying function is synchronous, but FastMCP can handle it.
     return sheet_to_markdown(worksheet)
-
-@mcp.tool()
-async def update_sheet_cell(cell_id: str, value: str) -> Dict:
+    
+@mcp.tool(exclude_args=["user_id"])
+async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict:
     """
     Updates a single cell in the Google Sheet.
 

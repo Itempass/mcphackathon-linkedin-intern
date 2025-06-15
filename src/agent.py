@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
 from dotenv import load_dotenv
 try:
@@ -41,20 +41,24 @@ class GenericMCPAgent:
     - Automatic user context injection
     """
     
-    def __init__(self, server_url: str, user_id: str, agent_id: str, openrouter_api_key: Optional[str] = None):
+    def __init__(self, server_urls: Union[str, List[str]], user_id: str, agent_id: str, openrouter_api_key: Optional[str] = None):
         """
         Initialize the AI-powered MCP agent.
         
         Args:
-            server_url: MCP server URL
+            server_urls: A single MCP server URL or a list of URLs
             user_id: User ID for context
             agent_id: Agent ID for tracking
             openrouter_api_key: OpenRouter API key (optional, uses env var if not provided)
         """
-        self.server_url = server_url
+        if isinstance(server_urls, str):
+            self.server_urls = [server_urls]
+        else:
+            self.server_urls = server_urls
+            
         self.user_id = user_id
         self.agent_id = agent_id
-        self.client: Optional[Client] = None
+        self.clients: List[Client] = []
         self.tools: List[Dict[str, Any]] = []
         self.conversation_history: List[Dict[str, Any]] = []
         
@@ -72,34 +76,45 @@ class GenericMCPAgent:
             logger.warning("No OpenRouter API key - agent will run in basic mode")
     
     async def __aenter__(self):
-        """Connect to MCP server and discover tools."""
+        """Connect to MCP servers and discover tools."""
         try:
-            self.client = Client(self.server_url)
-            await self.client.__aenter__()
+            for server_url in self.server_urls:
+                client = Client(server_url)
+                await client.__aenter__()
+                self.clients.append(client)
+                
+                # Discover available tools
+                tools_raw = await client.list_tools()
+                
+                # Get current tool names to check for duplicates
+                current_tool_names = self.tool_names
+
+                # Convert Tool objects to dictionaries and store with client
+                for tool in tools_raw:
+                    if tool.name in current_tool_names:
+                        logger.warning(f"Duplicate tool name '{tool.name}' found. The first one discovered will be used.")
+                    
+                    self.tools.append({
+                        "name": tool.name,
+                        "description": tool.description or "",
+                        "inputSchema": tool.inputSchema or {},
+                        "client": client  # Associate tool with its client
+                    })
             
-            # Discover available tools
-            tools_raw = await self.client.list_tools()
-            # Convert Tool objects to dictionaries
-            self.tools = [
-                {
-                    "name": tool.name,
-                    "description": tool.description or "",
-                    "inputSchema": tool.inputSchema or {}
-                }
-                for tool in tools_raw
-            ]
-            
-            logger.info(f"Connected to MCP server: {len(self.tools)} tools, 0 resources, 0 prompts")
+            logger.info(f"Connected to {len(self.clients)} MCP server(s): {len(self.tools)} tools found.")
             return self
             
         except Exception as e:
-            raise RuntimeError(f"Failed to connect to MCP server: {e}")
+            # Clean up any successful connections if one fails
+            for client in self.clients:
+                await client.__aexit__(None, None, None)
+            raise RuntimeError(f"Failed to connect to one or more MCP servers: {e}")
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Clean up connection."""
-        if self.client:
-            await self.client.__aexit__(exc_type, exc_val, exc_tb)
-            self.client = None
+        """Clean up connections."""
+        for client in self.clients:
+            await client.__aexit__(exc_type, exc_val, exc_tb)
+        self.clients = []
     
     def describe_capabilities(self) -> Dict[str, Any]:
         """Describe agent capabilities for external inspection."""
@@ -125,15 +140,29 @@ class GenericMCPAgent:
         Returns:
             Formatted result string
         """
-        if not self.client:
+        if not self.clients:
             raise RuntimeError("Agent not connected - use async context manager")
             
+        # Find the tool and its associated client
+        tool_to_execute = None
+        for tool in self.tools:
+            if tool["name"] == tool_name:
+                tool_to_execute = tool
+                break
+        
+        if not tool_to_execute:
+            error_msg = f"✗ {tool_name}: Error - tool not found."
+            logger.error(error_msg)
+            return error_msg
+
+        client = tool_to_execute["client"]
+
         # Add user_id explicitly since FastMCP exclude_args isn't working with standard MCP client
         args = dict(arguments or {})
         args["user_id"] = self.user_id
         
         try:
-            result = await self.client.call_tool(tool_name, args)
+            result = await client.call_tool(tool_name, args)
             
             # FastMCP returns a list of TextContent objects
             if result and hasattr(result[0], 'text'):
@@ -368,7 +397,7 @@ class GenericMCPAgent:
 
 # Convenience function for simple usage
 async def run_intelligent_agent(
-    server_url_or_path: str,
+    server_urls: Union[str, List[str]],
     user_id: str,
     agent_id: str,
     messages: List[Dict[str, Any]],
@@ -379,7 +408,7 @@ async def run_intelligent_agent(
     Run an intelligent MCP agent with AI decision-making.
     
     Args:
-        server_url_or_path: MCP server URL or path
+        server_urls: A single MCP server URL or a list of URLs
         user_id: User ID for context
         agent_id: Agent ID for tracking  
         messages: The conversation history to start the agent with.
@@ -389,7 +418,7 @@ async def run_intelligent_agent(
     Returns:
         The final conversation history (list of message dicts)
     """
-    async with GenericMCPAgent(server_url_or_path, user_id, agent_id, openrouter_api_key) as agent:
+    async with GenericMCPAgent(server_urls, user_id, agent_id, openrouter_api_key) as agent:
         return await agent.run_intelligent_agent(messages, max_iterations)
 
 
@@ -404,7 +433,7 @@ async def main():
     
     # Run the agent - it will intelligently explore whatever tools are available
     final_conversation = await run_intelligent_agent(
-        server_url_or_path="http://localhost:8000/mcp", 
+        server_urls=["http://localhost:8001/db-mcp"], 
         user_id="user123",
         agent_id="agent456", 
         messages=messages,

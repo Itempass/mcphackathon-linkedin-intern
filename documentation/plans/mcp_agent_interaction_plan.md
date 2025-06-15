@@ -42,7 +42,7 @@ From sequence diagrams, implement:
    # Basic structure
    class MCPClientWrapper:
        def __init__(self, base_url: str):
-           self.client = Client(f"{base_url}/mcp")
+           self.client = Client(f"{base_url}/db-mcp")
            
        async def __aenter__(self):
            return await self.client.__aenter__()

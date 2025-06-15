@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 import os
+import traceback
 
 from src.models import api_models
 from src.models.database_models import MessageType
@@ -57,23 +58,24 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
     print("SERVICE: New messages stored.")
 
     # 4. Get updated thread history and generate new draft
-    thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
-    thread_messages.sort(key=lambda msg: msg.timestamp)
+    try:
+        thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
+        thread_messages.sort(key=lambda msg: msg.timestamp)
 
-    # Run the agent to process the thread and suggest a draft
-    agent_id = str(uuid.uuid4())
-    
-    # Construct a rich, conversational prompt for the agent
-    history_str = "\n".join([f"- {msg.sender_name}: {msg.msg_content}" for msg in thread_messages if msg.type == MessageType.MESSAGE])
-    system_prompt = open("src/prompts/process_thread_prompt.txt").read()
-    messages = [
-        {
-            "role": "system", 
-            "content": system_prompt
-        },
-        {
-            "role": "user",
-            "content": f"""A new message has arrived in my message thread with '{request.thread_name}'. Please generate a helpful draft reply.
+        # Run the agent to process the thread and suggest a draft
+        agent_id = str(uuid.uuid4())
+        
+        # Construct a rich, conversational prompt for the agent
+        history_str = "\n".join([f"- {msg.sender_name}: {msg.msg_content}" for msg in thread_messages if msg.type == MessageType.MESSAGE])
+        system_prompt = open("src/prompts/process_thread_prompt.txt").read()
+        messages = [
+            {
+                "role": "system", 
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": f"""A new message has arrived in my message thread with '{request.thread_name}'. Please generate a helpful draft reply.
 
 Here is the conversation history so far:
 ---
@@ -81,77 +83,81 @@ Here is the conversation history so far:
 ---
 
 Analyze the conversation and suggest a suitable draft."""
-        }
-    ]
-    
-    conversation_history = await run_intelligent_agent(
-        mcp_clients=mcp_clients,
-        user_id=request.user_id,
-        agent_id=agent_id,
-        messages=messages
-    )
-
-    # Extract draft from the agent's final action by checking for a specific tool call
-    draft_content = None
-    if conversation_history:
-        # Check the last message from the assistant for a 'suggest_draft' tool call
-        last_message = conversation_history[-1]
-        if last_message.get("role") == "assistant" and last_message.get("tool_calls"):
-            for tool_call in last_message["tool_calls"]:
-                if tool_call.get("function", {}).get("name") == "suggest_draft":
-                    try:
-                        args = json.loads(tool_call["function"]["arguments"])
-                        draft_content = args.get("draft_content")
-                        break 
-                    except (json.JSONDecodeError, AttributeError):
-                        print("SERVICE: Could not parse draft from tool call arguments.")
-
-    # Only store a draft if one was successfully created by the agent
-    if draft_content:
-        all_current_thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
+            }
+        ]
         
-        # Extract message IDs from thread_messages that were used to create the agent context
-        thread_message_ids = {msg.id for msg in thread_messages if msg.type == MessageType.MESSAGE}
-        
-        # Check for new messages that weren't in the agent's context
-        new_messages = [msg for msg in all_current_thread_messages 
-                       if msg.type == MessageType.MESSAGE and 
-                       msg.id not in thread_message_ids]
-
-        if new_messages:
-            print("SERVICE: There are newer messages than the agent's context when making this draft. Draft discarded.")
-            return None
-        # if there is already a draft for the exaxt same thread, discard the draft
-        if len(new_messages) == 0 and any(msg.type == MessageType.DRAFT for msg in all_current_thread_messages):
-            print("SERVICE: A draft already exists for this exact same thread. Draft discarded.")
-            return None
-        
-        draft_timestamp = datetime.now()
-        draft_id = create_message_id("Agent", draft_timestamp, draft_content)
-
-        # Save the agent information with conversation history before adding the message
-        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
-        
-        # Store the draft
-        await add_message(
+        conversation_history = await run_intelligent_agent(
+            mcp_clients=mcp_clients,
             user_id=request.user_id,
-            message_id=draft_id,
-            message_type=MessageType.DRAFT,
-            msg_content=draft_content,
-            thread_name=request.thread_name,
-            sender_name="Agent",
-            timestamp=draft_timestamp,
-            agent_id=agent_id
+            agent_id=agent_id,
+            messages=messages
         )
 
-        print(f"SERVICE: Created new draft {draft_id} for thread {request.thread_name}.")
-        return draft_id
-    
-    # Save the agent information with conversation history
-    await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
-    
-    print("SERVICE: Agent did not produce a draft. No new draft created.")
-    return None
+        # Extract draft from the agent's final action by checking for a specific tool call
+        draft_content = None
+        if conversation_history:
+            # Check the last message from the assistant for a 'suggest_draft' tool call
+            last_message = conversation_history[-1]
+            if last_message.get("role") == "assistant" and last_message.get("tool_calls"):
+                for tool_call in last_message["tool_calls"]:
+                    if tool_call.get("function", {}).get("name") == "suggest_draft":
+                        try:
+                            args = json.loads(tool_call["function"]["arguments"])
+                            draft_content = args.get("draft_content")
+                            break 
+                        except (json.JSONDecodeError, AttributeError):
+                            print("SERVICE: Could not parse draft from tool call arguments.")
+
+        # Only store a draft if one was successfully created by the agent
+        if draft_content:
+            all_current_thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
+            
+            # Extract message IDs from thread_messages that were used to create the agent context
+            thread_message_ids = {msg.id for msg in thread_messages if msg.type == MessageType.MESSAGE}
+            
+            # Check for new messages that weren't in the agent's context
+            new_messages = [msg for msg in all_current_thread_messages 
+                        if msg.type == MessageType.MESSAGE and 
+                        msg.id not in thread_message_ids]
+
+            if new_messages:
+                print("SERVICE: There are newer messages than the agent's context when making this draft. Draft discarded.")
+                return None
+            # if there is already a draft for the exaxt same thread, discard the draft
+            if len(new_messages) == 0 and any(msg.type == MessageType.DRAFT for msg in all_current_thread_messages):
+                print("SERVICE: A draft already exists for this exact same thread. Draft discarded.")
+                return None
+            
+            draft_timestamp = datetime.now()
+            draft_id = create_message_id("Agent", draft_timestamp, draft_content)
+
+            # Save the agent information with conversation history before adding the message
+            await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+            
+            # Store the draft
+            await add_message(
+                user_id=request.user_id,
+                message_id=draft_id,
+                message_type=MessageType.DRAFT,
+                msg_content=draft_content,
+                thread_name=request.thread_name,
+                sender_name="Agent",
+                timestamp=draft_timestamp,
+                agent_id=agent_id
+            )
+
+            print(f"SERVICE: Created new draft {draft_id} for thread {request.thread_name}.")
+            return draft_id
+        
+        # Save the agent information with conversation history
+        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+        
+        print("SERVICE: Agent did not produce a draft. No new draft created.")
+        return None
+    except Exception as e:
+        print(f"SERVICE: An unexpected error occurred in process_thread_and_create_draft: {e}")
+        print(traceback.format_exc())
+        return None
 
 async def get_all_drafts_for_user(user_id: str) -> List[InternalMessage]:
     """

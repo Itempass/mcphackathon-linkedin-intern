@@ -49,35 +49,43 @@ async def get_db_session():
 @mcp.tool(exclude_args=["user_id"])
 async def get_similar_message(message_id: str, user_id: str = None) -> List[Dict[str, Any]]:
     """
-    Get messages similar to a specific message by using the message content as a query vector
+    Get messages similar to a specific message by using the message content as a query vector.
+    It can be used by passing a message ID, or by passing the content of a message as the message_id.
     
     Args:
-        message_id: The ID of the message to find similar messages for
+        message_id: The ID of the message to find similar messages for, or the content of the message.
     
     Returns:
         List of similar messages
     """
     top_k = 10
+    query_content = None
 
     if user_id is None:
         raise ValueError("user_id is required")
     
-    # Get the original message from MySQL
+    # Try to get the message from MySQL, assuming message_id is a valid ID
     original_message = await get_message(user_id, message_id)
-    if original_message is None:
-        raise ValueError(f"Message with ID '{message_id}' not found for user '{user_id}'")
     
-    # Use the message content as the query for finding similar messages
-    query_content = original_message.msg_content
+    if original_message:
+        # If we found a message by ID, use its content for the query
+        query_content = original_message.msg_content
+    else:
+        # If no message was found by ID, assume the input *is* the content
+        return [{"message": "No similar messages found."}]
     
     # Query Pinecone for similar messages
     similar_messages = pinecone_svc.query_messages(user_id, query_content, top_k)
-    print(f"DEBUG: Similar messages: {similar_messages}")
+    
+    if not similar_messages:
+        # If no similar messages are found, return a clear message
+        return [{"message": "No similar messages found."}]
+
     # Format the results to include the original message info
     results = []
     for msg in similar_messages:
-        # Skip the original message in results (same message_id)
-        if msg.get('message_id') == message_id:
+        # Skip the original message in results if we started from a message_id
+        if original_message and msg.get('message_id') == original_message.id:
             continue
             
         result = {

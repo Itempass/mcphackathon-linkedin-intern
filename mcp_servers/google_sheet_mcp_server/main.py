@@ -22,22 +22,30 @@ mcp = FastMCP("Google Sheets MCP Server")
 # --- Helper function to get the sheet ---
 # This avoids repeatedly authenticating for every tool call in a single request if we expand later
 def get_worksheet():
-    """Helper to get the first worksheet from the configured spreadsheet."""
+    """Helper to get the 'Sheet1' worksheet from the configured spreadsheet."""
     client = get_gsheets_client()
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    return spreadsheet.sheet1
+    return spreadsheet.worksheet("Sheet1")
 
 # --- Tools ---
 
 @mcp.tool(exclude_args=["user_id"])
-async def read_sheet(user_id: str=None) -> str:
+async def read_sheet(user_id: str=None, **kwargs) -> str:
     """
     Reads the entire content of the Google Sheet and returns it as a markdown table.
     Each cell in the markdown table is prefixed with its cell ID (e.g., [A1]).
     """
-    worksheet = get_worksheet()
-    # The underlying function is synchronous, but FastMCP can handle it.
-    return sheet_to_markdown(worksheet)
+    try:
+        if kwargs:
+            print(f"Warning: read_sheet received unexpected arguments, but will ignore them: {kwargs}")
+        
+        worksheet = get_worksheet()
+        # The underlying function is synchronous, but FastMCP can handle it.
+        return sheet_to_markdown(worksheet)
+    except Exception as e:
+        print(f"ERROR in read_sheet: {e}")
+        # Return a meaningful error to the agent instead of crashing
+        return f"An error occurred while reading the sheet: {str(e)}"
     
 @mcp.tool(exclude_args=["user_id"])
 async def update_sheet_cell(cell_id: str, value: str, user_id: str=None) -> Dict:

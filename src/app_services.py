@@ -108,6 +108,11 @@ Analyze the conversation and suggest a suitable draft."""
                         except (json.JSONDecodeError, AttributeError):
                             print("SERVICE: Could not parse draft from tool call arguments.")
 
+        # Save the agent information with conversation history, regardless of draft creation
+        print(f"SERVICE: Attempting to save agent {agent_id} with conversation history.")
+        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+        print(f"SERVICE: Successfully saved agent {agent_id}.")
+
         # Only store a draft if one was successfully created by the agent
         if draft_content:
             all_current_thread_messages = await get_all_messages_of_thread(request.user_id, request.thread_name)
@@ -131,11 +136,6 @@ Analyze the conversation and suggest a suitable draft."""
             draft_timestamp = datetime.now()
             draft_id = create_message_id("Agent", draft_timestamp, draft_content)
 
-            # Save the agent information with conversation history before adding the message
-            print(f"SERVICE: Attempting to save agent {agent_id} with conversation history.")
-            await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
-            print(f"SERVICE: Successfully saved agent {agent_id}.")
-            
             # Store the draft
             await add_message(
                 user_id=request.user_id,
@@ -150,11 +150,6 @@ Analyze the conversation and suggest a suitable draft."""
 
             print(f"SERVICE: Created new draft {draft_id} for thread {request.thread_name}.")
             return draft_id
-        
-        # Save the agent information with conversation history
-        print(f"SERVICE: Attempting to save agent {agent_id} with conversation history.")
-        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
-        print(f"SERVICE: Successfully saved agent {agent_id}.")
         
         print("SERVICE: Agent did not produce a draft. No new draft created.")
         return None

@@ -10,6 +10,7 @@ import logging
 import json
 from typing import Dict, Any
 
+from fastmcp import Client
 from src.agent import GenericMCPAgent, run_intelligent_agent
 
 # Setup logging to see what's happening
@@ -35,7 +36,8 @@ async def test_basic_connection():
     
     try:
         # Test basic connection and capability discovery
-        async with GenericMCPAgent(mcp_url, "test_user", "test_agent") as agent:
+        client = Client(mcp_url)
+        async with GenericMCPAgent([client], "test_user", "test_agent") as agent:
             logger.info("✓ Successfully connected to MCP server!")
             
             # Show discovered capabilities
@@ -68,7 +70,8 @@ async def test_tool_execution():
     mcp_url = f"{backend_url}/db-mcp"
     
     try:
-        async with GenericMCPAgent(mcp_url, "test_user", "test_agent") as agent:
+        client = Client(mcp_url)
+        async with GenericMCPAgent([client], "test_user", "test_agent") as agent:
             
             # Test executing the first available tool
             if agent.tool_names:
@@ -96,7 +99,8 @@ async def debug_gsheet_agent():
     logger.info(f"--- Debugging gsheet agent at: {mcp_url} ---")
     
     try:
-        async with GenericMCPAgent(mcp_url, "test_user", "debug_agent") as agent:
+        client = Client(mcp_url)
+        async with GenericMCPAgent([client], "test_user", "debug_agent") as agent:
             if not agent.tools:
                 logger.warning("No tools found for gsheet agent. Cannot debug.")
                 return
@@ -166,8 +170,9 @@ async def test_agent_loop():
     ]
     
     try:
+        client = Client(mcp_url)
         results = await run_intelligent_agent(
-            server_urls=mcp_url,
+            mcp_clients=[client],
             user_id="fb202dd1-8fd2-41e0-8532-8d714d024151",
             agent_id="test_agent_456",
             messages=messages,

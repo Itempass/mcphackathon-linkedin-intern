@@ -69,6 +69,16 @@ class GenericMCPAgent:
             self.has_llm = False
             logger.warning("No OpenRouter API key - agent will run in basic mode")
     
+    async def __aenter__(self):
+        """Enter the async context manager, discover tools."""
+        await self.discover_tools()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit the async context manager."""
+        # No specific cleanup needed for clients in this agent implementation
+        pass
+    
     async def discover_tools(self):
         """Connect temporarily to discover tools from all clients."""
         all_tools = []

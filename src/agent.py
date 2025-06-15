@@ -243,7 +243,7 @@ class GenericMCPAgent:
         
         # Get response from OpenRouter
         response = self.llm_client.chat.completions.create(
-            model=os.getenv("OPENROUTER_MODEL", "anthropic/claude-3-haiku-20240307"),
+            model=os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.7-sonnet:thinking"),
             messages=llm_messages,
             tools=self._format_tools_for_llm(),
             tool_choice="auto",
@@ -265,8 +265,8 @@ class GenericMCPAgent:
             
             # If the model wants to call a tool
             if assistant_response.tool_calls:
-                # Add the assistant's response to history
-                self.conversation_history.append(assistant_response)
+                # Add the assistant's response to history as a dictionary
+                self.conversation_history.append(assistant_response.model_dump())
                 
                 # Execute all tool calls
                 for tool_call in assistant_response.tool_calls:
@@ -305,7 +305,8 @@ class GenericMCPAgent:
             # If the model returns a regular message, it's the final answer
             else:
                 logger.info("🤖 LLM provided a final answer.")
-                self.conversation_history.append(assistant_response)
+                # Add the assistant's response to history as a dictionary
+                self.conversation_history.append(assistant_response.model_dump())
                 return self.conversation_history
 
         logger.warning("Agent reached max iterations. Returning conversation history.")

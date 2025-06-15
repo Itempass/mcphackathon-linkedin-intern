@@ -6,7 +6,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, delete, text
+from sqlalchemy import select, delete
 import hashlib
 import uuid
 from sqlalchemy.exc import IntegrityError
@@ -17,6 +17,7 @@ from src.models.database_models import Base, Message, Agent, MessageType
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # Database configuration
 db_url = os.environ.get("MYSQL_DB")
@@ -221,12 +222,16 @@ async def add_message(
     Returns:
         The created Message object
     """
-    from sqlalchemy import text
-    
     logger.debug(f"Adding message {message_id} for user {user_id}, thread {thread_name}, sender {sender_name}")
     
+    # Check if message already exists first
+    existing_message = await get_message(user_id, message_id)
+    if existing_message:
+        logger.info(f"Message {message_id} already exists, returning existing message")
+        return existing_message
+    
+    # Message doesn't exist, so insert it
     async with AsyncSessionLocal() as session:
-        # First try to insert normally
         message = Message(
             id=message_id,
             user_id=user_id,
@@ -244,76 +249,17 @@ async def add_message(
             await session.refresh(message)
             logger.debug(f"Successfully added message {message_id}")
             return message
-        except IntegrityError as e:
-            # Handle duplicate key error
-            logger.warning(f"IntegrityError occurred for message {message_id}: {e}")
+        except IntegrityError:
+            # Race condition: someone else inserted it between our check and insert
+            logger.info(f"Race condition detected for message {message_id}, returning existing message")
             await session.rollback()
-            
-            # Check if the existing message is actually the same one we're trying to insert
-            # Use the same session to ensure we see the conflicting record
-            stmt = select(Message).where(
-                Message.user_id == user_id,
-                Message.id == message_id
-            )
-            result = await session.execute(stmt)
-            existing_message = result.scalar_one_or_none()
-            
+            existing_message = await get_message(user_id, message_id)
             if existing_message:
-                # Verify it's the exact same message (content, thread, sender match)
-                if (existing_message.msg_content == msg_content and 
-                    existing_message.thread_name == thread_name and 
-                    existing_message.sender_name == sender_name and
-                    existing_message.type == message_type):
-                    # This is a duplicate insertion of the same message - return the existing one
-                    logger.info(f"Message {message_id} already exists with same content - returning existing message")
-                    return existing_message
-                else:
-                    # Same ID but different content - this is a real collision
-                    logger.error(f"Message ID collision detected: {message_id} exists with different content")
-                    logger.error(f"Existing: {existing_message.msg_content[:50]}... vs New: {msg_content[:50]}...")
-                    raise ValueError(f"Message ID collision: {message_id} already exists with different content")
+                return existing_message
             else:
-                # Try a more robust approach using MySQL's ON DUPLICATE KEY UPDATE
-                try:
-                    logger.info(f"Attempting ON DUPLICATE KEY UPDATE fallback for message {message_id}")
-                    # Use raw SQL for better control over duplicate key handling
-                    sql = text("""
-                        INSERT INTO messages (id, user_id, msg_content, type, thread_name, sender_name, timestamp, agent_id)
-                        VALUES (:id, :user_id, :msg_content, :type, :thread_name, :sender_name, :timestamp, :agent_id)
-                        ON DUPLICATE KEY UPDATE
-                            id = VALUES(id)
-                    """)
-                    
-                    await session.execute(sql, {
-                        'id': message_id,
-                        'user_id': user_id,
-                        'msg_content': msg_content,
-                        'type': message_type.value,
-                        'thread_name': thread_name,
-                        'sender_name': sender_name,
-                        'timestamp': timestamp,
-                        'agent_id': agent_id
-                    })
-                    await session.commit()
-                    
-                    # Now fetch the message that was inserted/updated
-                    stmt = select(Message).where(
-                        Message.user_id == user_id,
-                        Message.id == message_id
-                    )
-                    result = await session.execute(stmt)
-                    final_message = result.scalar_one_or_none()
-                    
-                    if final_message:
-                        logger.info(f"Message {message_id} inserted/updated using ON DUPLICATE KEY UPDATE")
-                        return final_message
-                    else:
-                        logger.error(f"Failed to retrieve message after ON DUPLICATE KEY UPDATE: {message_id}")
-                        raise e
-                        
-                except Exception as fallback_error:
-                    logger.error(f"Fallback ON DUPLICATE KEY UPDATE failed for message {message_id}: {fallback_error}")
-                    raise e
+                # This really shouldn't happen, but if it does, re-raise
+                logger.error(f"Integrity error but no existing message found for {message_id}")
+                raise
 
 # Utility functions for creating IDs (same as in setup script)
 def create_message_id(sender_name: str, timestamp: datetime, content: str) -> str:

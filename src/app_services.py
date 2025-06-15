@@ -66,7 +66,7 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
     messages = [
         {
             "role": "system", 
-            "content": "You are an expert assistant. Your primary goal is to help the user by drafting a reply to a conversation. Use the tools provided to understand the conversation's context, then use the `suggest_draft` tool to propose a reply. Be concise and helpful."
+            "content": "You are an expert assistant. Your primary goal is to create a draft reply to a linkedin chat conversation. Use the toolcall suggest_draft for that."
         },
         {
             "role": "user",

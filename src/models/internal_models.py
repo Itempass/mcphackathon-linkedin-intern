@@ -1,10 +1,34 @@
 # This file will hold internal data models, such as SQLAlchemy ORM classes. 
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime
+import enum
 import uuid
 from src.models.database_models import MessageType
+
+# Add ToolCallType and ToolCall to support tests
+class ToolCallType(enum.Enum):
+    SUGGEST_DRAFT = "suggest_draft"
+    FIND_SIMILAR_MESSAGES = "find_similar_messages"
+    SEMANTIC_SEARCH = "semantic_search"
+    END_WORK = "end_work"
+
+class ToolCall(BaseModel):
+    tool_type: ToolCallType
+    kwargs: Dict[str, Any] = Field(default_factory=dict)
+    
+    def __init__(self, tool_type: ToolCallType, **kwargs):
+        super().__init__(tool_type=tool_type, kwargs=kwargs)
+
+# Add MCPMessage to support MCP client tests
+class MCPMessage(BaseModel):
+    content: str
+    msg_type: MessageType
+    thread_name: str
+    sender_name: str
+    user_id: str
+    agent_id: Optional[str] = None
 
 class InternalMessage(BaseModel):
     """

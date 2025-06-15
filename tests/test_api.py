@@ -40,6 +40,7 @@ def test_process_feedback(mocker):
 
     payload = {
         "user_id": "test_user",
+        "thread_name": "test_thread",
         "draft_message_id": "draft123",
         "feedback": "This is great!"
     }

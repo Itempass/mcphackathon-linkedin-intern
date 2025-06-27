@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "CRXJS React Vite App",
+  "description": "A Chrome extension with a side panel, built with Vite, React, and TypeScript.",
+  "version": "0.0.1",
+  "action": {
+    "default_title": "Click to open side panel"
+  },
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://mcphackathon.cloud1.itempasshomelab.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.linkedin.com/messaging/*"],
+      "js": ["src/content/dom-watcher.ts"]
+    }
+  ],
+  "side_panel": {
+    "default_path": "src/sidepanel.html"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  }
+} 

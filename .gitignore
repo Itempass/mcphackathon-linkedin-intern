@@ -196,3 +196,28 @@ cython_debug/
 .cursorindexingignore
 
 # Credentials
+
+
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+
+# Vite build cache
+.vite/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS-specific
+.DS_Store
+Thumbs.db 

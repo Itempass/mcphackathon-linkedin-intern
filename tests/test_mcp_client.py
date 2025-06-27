@@ -6,9 +6,9 @@ from unittest.mock import Mock, AsyncMock, patch
 from typing import List, Dict, Any
 
 # Import from existing modules instead
-from src.agent import run_intelligent_agent, GenericMCPAgent
-from src.models.database_models import MessageType
-from src.models.internal_models import MCPMessage, ToolCall, ToolCallType
+from api.agent import run_intelligent_agent, GenericMCPAgent
+from api.models.database_models import MessageType
+from api.models.internal_models import MCPMessage, ToolCall, ToolCallType
 
 # For error classes
 class MCPError(Exception):

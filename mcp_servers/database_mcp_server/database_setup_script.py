@@ -18,7 +18,7 @@ import uuid
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
 
-from src.models.database_models import Base, Message, Agent, MessageType
+from api.models.database_models import Base, Message, Agent, MessageType
 
 # Load environment variables
 load_dotenv(override=True)

@@ -13,5 +13,7 @@ aiomysql
 python-dotenv 
 greenlet
 gspread
-pandas
+
 google-auth
+mysql-connector-python
+aiosqlite

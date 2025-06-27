@@ -13,25 +13,28 @@ logger = logging.getLogger(__name__)
 # Add project root to Python path to import shared models
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
-print(f"DEBUG: Project root: {project_root}")
-print(f"DEBUG: Python path: {sys.path[:3]}")
 
 from fastmcp import FastMCP, Context
-from src.models.database_models import Base, Message, Agent, MessageType
-from src.services.mysql_service import *
-from src.services.pinecone_service import PineconeService
+from api.models.database_models import Base, Message, Agent, MessageType
+from api.services.pinecone_service import PineconeService
 
 # --- Configuration ---
 load_dotenv(override=True)
-db_url = os.environ.get("MYSQL_DB")
-if not db_url:
-    raise ValueError("MYSQL_DB environment variable not set.")
+db_path = os.environ.get("SQLITE_DB_PATH")
+if not db_path:
+    raise ValueError("SQLITE_DB_PATH environment variable not set.")
 
-if db_url.startswith("mysql://"):
-    db_url = db_url.replace("mysql://", "mysql+aiomysql://", 1)
-
-engine = create_async_engine(db_url)
+# The async SQLite driver uses a file path URI
+engine = create_async_engine(
+    f"sqlite+aiosqlite:///{db_path}",
+    connect_args={"check_same_thread": False}
+)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+async def init_db():
+    """Initializes the database and creates tables if they don't exist."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 # --- FastMCP Application Setup ---
 mcp = FastMCP("Database MCP Server")
@@ -157,6 +160,10 @@ async def get_thread_by_message_id(message_id: str, user_id: str = None) -> List
 
 # --- Server Execution ---
 if __name__ == "__main__":
+    # Initialize the database before starting the server
+    import asyncio
+    asyncio.run(init_db())
+    
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("MCP_DB_SERVERPORT"))
     

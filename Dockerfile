@@ -1,47 +1,35 @@
-# Use Python 3.11 slim as base image
-FROM python:3.11-slim
+# Stage 1: Build the Next.js frontend
+FROM node:20-slim as builder
+ARG MYSQL_DB
+ENV MYSQL_DB=$MYSQL_DB
+WORKDIR /app/agentlogger
+COPY agentlogger/package*.json ./
+RUN npm install
+COPY agentlogger ./
+RUN npm run build
 
-# Set working directory
+# Stage 2: Setup the Python backend and final image
+FROM python:3.10-slim
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    default-libmysqlclient-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+# Install supervisor
+RUN apt-get update && apt-get install -y supervisor
 
-# Copy all requirements files first for better caching
+# Copy application code
+COPY api ./api
+COPY mcp_servers/database_mcp_server ./mcp_servers/database_mcp_server
+COPY --from=builder /app/agentlogger /app/agentlogger
+
+# Install Python dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
 
-# Install all dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy supervisor configuration
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy the entire project
-COPY . .
+# Expose ports (only frontend will be published to host)
+EXPOSE 3000
+EXPOSE 8000
+EXPOSE 8001
 
-# Create a startup script that runs both services in parallel
-RUN echo '#!/bin/bash\n\
-echo "Starting Database MCP Server in background..."\n\
-cd /app/mcp_servers/database_mcp_server && python main.py &\n\
-\n\
-echo "Starting Google Sheets MCP Server in background..."\n\
-cd /app/mcp_servers/google_sheet_mcp_server && python main.py &\n\
-\n\
-echo "Starting main FastAPI backend..."\n\
-cd /app && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000} &\n\
-\n\
-# Wait for all background processes\n\
-wait' > /app/start.sh && chmod +x /app/start.sh
-
-# Set environment variables with defaults
-ENV PORT=8000
-ENV MCP_DB_SERVERPORT=8001
-ENV MCP_GSHEETS_SERVERPORT=8002
-ENV BACKEND_BASE_URL=http://localhost
-
-# Expose all necessary ports
-EXPOSE 8000 8001 8002
-
-# Start both services
-CMD ["/app/start.sh"] 
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 

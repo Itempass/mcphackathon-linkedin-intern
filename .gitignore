@@ -199,10 +199,12 @@ cython_debug/
 
 
 # Dependencies
-/node_modules
+node_modules/
 
 # Build output
-/dist
+dist/
+out/
+.next/
 
 # Vite build cache
 .vite/
@@ -217,7 +219,23 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # OS-specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# DS_Store
+.DS_Store 

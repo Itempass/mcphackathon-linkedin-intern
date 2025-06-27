@@ -11,7 +11,8 @@ import json
 from typing import Dict, Any
 
 from fastmcp import Client
-from src.agent import GenericMCPAgent, run_intelligent_agent
+from api.agent import GenericMCPAgent, run_intelligent_agent
+from dotenv import load_dotenv
 
 # Setup logging to see what's happening
 logging.basicConfig(
@@ -20,18 +21,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+load_dotenv(override=True)
+
 
 async def test_basic_connection():
     """Test basic connection and tool listing."""
     
     # Get MCP server URL from environment
-    backend_url = os.getenv("BACKEND_BASE_URL")
-    if not backend_url:
-        logger.error("BACKEND_BASE_URL environment variable not set!")
-        logger.info("Please set it like: export BACKEND_BASE_URL=http://localhost:8000")
+    mcp_url = os.getenv("MCP_DB_SERVER_URL")
+    if not mcp_url:
+        logger.error("MCP_DB_SERVER_URL environment variable not set!")
+        logger.info("Please set it like: export MCP_DB_SERVER_URL=http://localhost:8001/mcp")
         return
     
-    mcp_url = f"{backend_url}/db-mcp"
     logger.info(f"Testing connection to MCP server at: {mcp_url}")
     
     try:
@@ -62,13 +64,11 @@ async def test_basic_connection():
 async def test_tool_execution():
     """Test executing a simple tool."""
     
-    backend_url = os.getenv("BACKEND_BASE_URL")
-    if not backend_url:
-        logger.error("BACKEND_BASE_URL environment variable not set!")
+    mcp_url = os.getenv("MCP_DB_SERVER_URL")
+    if not mcp_url:
+        logger.error("MCP_DB_SERVER_URL environment variable not set!")
         return
         
-    mcp_url = f"{backend_url}/db-mcp"
-    
     try:
         client = Client(mcp_url)
         async with GenericMCPAgent([client], "test_user", "test_agent") as agent:
@@ -88,79 +88,13 @@ async def test_tool_execution():
         logger.error(f"✗ Tool execution test failed: {e}")
 
 
-async def debug_gsheet_agent():
-    """Connect to gsheet agent and print raw LLM output for debugging."""
-    backend_url = os.getenv("BACKEND_BASE_URL")
-    if not backend_url:
-        logger.error("BACKEND_BASE_URL environment variable not set!")
-        return
-        
-    mcp_url = f"{backend_url}/gsheet-mcp"
-    logger.info(f"--- Debugging gsheet agent at: {mcp_url} ---")
-    
-    try:
-        client = Client(mcp_url)
-        async with GenericMCPAgent([client], "test_user", "debug_agent") as agent:
-            if not agent.tools:
-                logger.warning("No tools found for gsheet agent. Cannot debug.")
-                return
-
-            logger.info("GSheet agent tools loaded. Preparing to call LLM...")
-            
-            # A prompt designed to trigger a tool call on the gsheet server
-            messages = [
-                {"role": "user", "content": "Please read the data from the sheet."}
-            ]
-
-            # Get tools in the OpenAI-compatible format
-            llm_tools = agent._format_tools_for_llm()
-
-            logger.info("Sending request to LLM...")
-            
-            # Manually call the LLM to inspect the raw response
-            response = agent.llm_client.chat.completions.create(
-                model="anthropic/claude-3.7-sonnet:thinking",
-                messages=messages,
-                tools=llm_tools,
-                tool_choice="auto",
-            )
-            
-            logger.info("--- RAW LLM RESPONSE ---")
-            # Using model_dump_json for pydantic models gives a nice, clean json string
-            logger.info(response.model_dump_json(indent=2))
-            logger.info("--- END RAW LLM RESPONSE ---")
-
-            # We can also try to replicate the failure here
-            try:
-                response_message = response.choices[0].message
-                if response_message.tool_calls:
-                    tool_call = response_message.tool_calls[0]
-                    logger.info("Attempting to parse arguments...")
-                    # Fix: Handle empty argument string from LLM
-                    arguments_str = tool_call.function.arguments
-                    if not arguments_str:
-                        arguments = {}
-                    else:
-                        arguments = json.loads(arguments_str)
-                    logger.info(f"Successfully parsed arguments: {arguments}")
-                else:
-                    logger.info("LLM did not return a tool call.")
-            except Exception as e:
-                logger.error(f"!!! Replicated the JSON parsing error: {e}")
-
-    except Exception as e:
-        logger.error(f"✗ Debugging gsheet agent failed: {e}")
-
-
 async def test_agent_loop():
     """Test the full agent loop with a simple context."""
     
-    backend_url = os.getenv("BACKEND_BASE_URL")
-    if not backend_url:
-        logger.error("BACKEND_BASE_URL environment variable not set!")
+    mcp_url = os.getenv("MCP_DB_SERVER_URL")
+    if not mcp_url:
+        logger.error("MCP_DB_SERVER_URL environment variable not set!")
         return
-        
-    mcp_url = f"{backend_url}/db-mcp"
     
     logger.info("Testing intelligent exploration...")
     
@@ -208,10 +142,6 @@ async def main():
     logger.info("\n3. Testing intelligent exploration...")
     await test_agent_loop()
     
-    # Test 4: Debug GSheet Agent
-    logger.info("\n4. Debugging GSheet Agent LLM call...")
-    await debug_gsheet_agent()
-    
     logger.info("\n" + "=" * 50)
     logger.info("Test suite completed!")
     logger.info("=" * 50)
@@ -219,16 +149,16 @@ async def main():
 
 if __name__ == "__main__":
     # Check environment first
-    backend_url = os.getenv("BACKEND_BASE_URL")
-    if not backend_url:
-        print("\n❌ BACKEND_BASE_URL environment variable not set!")
+    mcp_url = os.getenv("MCP_DB_SERVER_URL")
+    if not mcp_url:
+        print("\n❌ MCP_DB_SERVER_URL environment variable not set!")
         print("Please set it first, for example:")
-        print("  export BACKEND_BASE_URL=http://localhost:8000")
+        print("  export MCP_DB_SERVER_URL=http://localhost:8001/mcp")
         print("  python test_agent.py")
         exit(1)
     
     print(f"\n🚀 Starting MCP Agent tests...")
-    print(f"📡 MCP Server: {backend_url}/db-mcp")
+    print(f"📡 MCP Server: {mcp_url}")
     print()
     
     try:

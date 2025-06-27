@@ -7,10 +7,10 @@ from unittest.mock import patch, mock_open, AsyncMock, MagicMock
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from src import app_services
-from src.models import api_models
-from src.models.database_models import MessageType, Agent, Base
-from src.services.mysql_service import create_message_id
+from api import app_services
+from api.models import api_models
+from api.models.database_models import MessageType, Agent, Base
+from api.services.mysql_service import create_message_id
 
 # Test database configuration - hardcoded to avoid production DB
 TEST_DB_URL = "mysql+aiomysql://mysql:Q6RBxlMC8emlO77xUfE9mgTWY6QacSwX0bMma5rUg5FSq3xjxeEfAxUvfRPb1ula@157.180.95.22:5444/default"
@@ -31,7 +31,7 @@ async def db_add_message(
     agent_id: str = None
 ):
     """Test version of add_message that uses test database"""
-    from src.models.database_models import Message
+    from api.models.database_models import Message
     
     async with TestAsyncSessionLocal() as session:
         message = Message(
@@ -52,7 +52,7 @@ async def db_add_message(
 async def db_remove_message(user_id: str, message_id: str) -> bool:
     """Test version of remove_message that uses test database"""
     from sqlalchemy import delete
-    from src.models.database_models import Message
+    from api.models.database_models import Message
     
     async with TestAsyncSessionLocal() as session:
         stmt = delete(Message).where(
@@ -66,7 +66,7 @@ async def db_remove_message(user_id: str, message_id: str) -> bool:
 async def db_get_all_messages_of_type(user_id: str, message_type: MessageType):
     """Test version of get_all_messages_of_type that uses test database"""
     from sqlalchemy import select
-    from src.models.database_models import Message
+    from api.models.database_models import Message
     
     async with TestAsyncSessionLocal() as session:
         stmt = select(Message).where(
@@ -79,7 +79,7 @@ async def db_get_all_messages_of_type(user_id: str, message_type: MessageType):
 async def db_get_all_messages_of_thread(user_id: str, thread_name: str):
     """Test version of get_all_messages_of_thread that uses test database"""
     from sqlalchemy import select
-    from src.models.database_models import Message
+    from api.models.database_models import Message
     
     async with TestAsyncSessionLocal() as session:
         stmt = select(Message).where(
@@ -93,7 +93,7 @@ async def db_upsert_agent(user_id: str, agent_id: str, messages_array=None):
     """Test version of upsert_agent that uses test database"""
     import json
     from sqlalchemy import select
-    from src.models.database_models import Agent
+    from api.models.database_models import Agent
     
     async with TestAsyncSessionLocal() as session:
         # Convert messages_array to JSON string if provided

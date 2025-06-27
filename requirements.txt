@@ -19,3 +19,4 @@ mysql-connector-python
 aiosqlite
 pytest-asyncio
 pytest-mock
+qdrant-client

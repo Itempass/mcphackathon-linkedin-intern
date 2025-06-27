@@ -16,7 +16,7 @@ sys.path.insert(0, project_root)
 
 from fastmcp import FastMCP, Context
 from api.models.database_models import Base, Message, Agent, MessageType
-from api.services.pinecone_service import PineconeService
+from api.services import qdrant_client
 
 # --- Configuration ---
 load_dotenv(override=True)
@@ -40,7 +40,6 @@ async def init_db():
 mcp = FastMCP("Database MCP Server")
 
 # --- Service Initialization ---
-pinecone_svc = PineconeService()
 
 async def get_db_session():
     """Get a database session"""
@@ -93,8 +92,13 @@ async def get_similar_message(
     if not query_content:
         return [{"message": "Could not determine content for similarity search."}]
 
-    # Query Pinecone for similar messages
-    similar_messages = pinecone_svc.query_messages(user_id, query_content, top_k)
+    # Query Qdrant for similar messages
+    similar_messages = qdrant_client.semantic_search(
+        collection_name="emails",
+        user_id=user_id, 
+        query=query_content, 
+        top_k=top_k
+    )
     
     if not similar_messages:
         # If no similar messages are found, return a clear message

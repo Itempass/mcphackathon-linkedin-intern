@@ -348,14 +348,15 @@ async def run_intelligent_agent(
     Returns:
         The complete conversation history.
     """
+    print("SERVICE: in agent function")
     agent = GenericMCPAgent(mcp_clients, user_id, agent_id, openrouter_api_key)
-    
+    print("SERVICE: listing tools")
     # Discover tools using short-lived connections
     await agent.discover_tools()
-    
+    print("SERVICE: running agent")
     # Run the main agent loop
     conversation_history = await agent.run_intelligent_agent(messages, max_iterations)
-    
+    print("SERVICE: agent finished")
     return conversation_history
 
 

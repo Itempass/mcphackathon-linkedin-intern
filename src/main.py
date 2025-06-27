@@ -19,8 +19,7 @@ async def lifespan(app: FastAPI):
     gsheet_mcp_url = f"{os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')}/gsheet-mcp"
     
     app.state.mcp_clients = [
-        Client(db_mcp_url),
-        Client(gsheet_mcp_url)
+        Client(db_mcp_url)
     ]
     print(f"✅ MCP Clients created for URLs: {db_mcp_url}, {gsheet_mcp_url}")
     yield

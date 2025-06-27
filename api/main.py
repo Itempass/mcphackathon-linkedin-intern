@@ -10,6 +10,7 @@ from api import models, app_services
 from api import background_tasks as tasks
 import httpx
 from fastmcp import Client
+from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,6 +27,14 @@ async def lifespan(app: FastAPI):
     print("ℹ️ Shutting down.")
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # == GENERAL BACKEND SERVER ==
 

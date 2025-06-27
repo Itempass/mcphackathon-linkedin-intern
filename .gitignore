@@ -238,4 +238,7 @@ Thumbs.db
 *.sw?
 
 # DS_Store
-.DS_Store 
+.DS_Store
+
+# Created by Gemini
+.db_server.pid 

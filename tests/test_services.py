@@ -10,13 +10,13 @@ from sqlalchemy.orm import sessionmaker
 from api import app_services
 from api.models import api_models
 from api.models.database_models import MessageType, Agent, Base
-from api.services.mysql_service import create_message_id
+from api.services.sqlite_service import create_message_id
 
-# Test database configuration - hardcoded to avoid production DB
-TEST_DB_URL = "mysql+aiomysql://mysql:Q6RBxlMC8emlO77xUfE9mgTWY6QacSwX0bMma5rUg5FSq3xjxeEfAxUvfRPb1ula@157.180.95.22:5444/default"
+# Test database configuration - use in-memory SQLite for tests
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 # Create test-specific engine and session factory
-test_engine = create_async_engine(TEST_DB_URL)
+test_engine = create_async_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 TestAsyncSessionLocal = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 # Test-specific database functions that use the test engine
@@ -152,8 +152,8 @@ async def setup_test_db():
 def mock_prompts(mocker):
     """Mocks reading prompts from files."""
     mock_files = {
-        "src/prompts/process_thread_prompt.txt": "Process thread prompt",
-        "src/prompts/revise_draft_prompt.txt": "Revise draft prompt",
+        "api/prompts/process_thread_prompt.txt": "Process thread prompt",
+        "api/prompts/revise_draft_prompt.txt": "Revise draft prompt",
     }
     mocker.patch("builtins.open", new=lambda file, *args, **kwargs: mock_open(read_data=mock_files[file])())
 
@@ -173,7 +173,7 @@ async def test_delete_draft():
     )
     
     # Mock the app_services to use test database functions
-    with patch('src.app_services.remove_message', db_remove_message):
+    with patch('api.app_services.remove_message', db_remove_message):
         request = api_models.APIRejectDraftRequest(user_id="test_user", draft_message_id=draft_id)
         await app_services.delete_draft(request)
     
@@ -197,7 +197,7 @@ async def test_delete_draft_wrong_user():
     )
     
     # Mock the app_services to use test database functions
-    with patch('src.app_services.remove_message', db_remove_message):
+    with patch('api.app_services.remove_message', db_remove_message):
         request = api_models.APIRejectDraftRequest(user_id="wrong_user", draft_message_id=draft_id)
         await app_services.delete_draft(request)
     
@@ -215,7 +215,7 @@ async def test_process_thread_and_create_draft_with_new_messages(mocker):
     - Creates new draft
     """
     # Mock LLM response and draft extraction
-    mocker.patch("src.agent.run_intelligent_agent", return_value=[{
+    mocker.patch("api.agent.run_intelligent_agent", return_value=[{
         "role": "assistant", 
         "content": "New mock LLM draft.", 
         "tool_calls": [{"function": {"name": "suggest_draft", "arguments": "{}"}}]
@@ -357,7 +357,7 @@ async def test_process_thread_and_create_draft_with_new_messages(mocker):
 async def test_create_revised_draft_from_feedback(mocker):
     """Tests the create_revised_draft_from_feedback function."""
     # Mock LLM response
-    mocker.patch("src.agent.run_intelligent_agent", return_value=[{
+    mocker.patch("api.agent.run_intelligent_agent", return_value=[{
         "role": "assistant", 
         "content": "Revised mock LLM draft.", 
         "tool_calls": [{"function": {"name": "suggest_draft", "arguments": '{"draft_content": "Revised mock LLM draft."}'}}]

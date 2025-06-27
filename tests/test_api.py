@@ -4,17 +4,21 @@ from unittest.mock import AsyncMock
 from api.main import app
 import datetime
 
-client = TestClient(app)
+# Use a fixture to manage the client's lifespan
+@pytest.fixture(scope="module")
+def client():
+    with TestClient(app) as c:
+        yield c
 
-def test_read_root():
+def test_root(client):
     response = client.get("/")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
-def test_send_messages(mocker):
+def test_send_messages(mocker, client):
     # Mock the background task function
-    mock_task = mocker.patch("src.background_tasks.run_thread_processing")
-
+    mock_task = mocker.patch("api.background_tasks.run_thread_processing")
+    
     payload = {
         "user_id": "test_user",
         "thread_name": "test_thread",
@@ -22,8 +26,8 @@ def test_send_messages(mocker):
             {
                 "message_id": "msg1",
                 "sender_name": "sender1",
-                "date": str(datetime.date.today()),
-                "time": str(datetime.time(12, 30)),
+                "date": str(datetime.datetime.now().date()),
+                "time": str(datetime.datetime.now().time()),
                 "message_content": "Hello world"
             }
         ]
@@ -31,13 +35,12 @@ def test_send_messages(mocker):
     response = client.post("/send-messages/", json=payload)
     assert response.status_code == 202
     assert response.json() == {"message": "Message processing started in the background"}
-    # Assert that the task was called once
     mock_task.assert_called_once()
 
-def test_process_feedback(mocker):
+def test_process_feedback(mocker, client):
     # Mock the background task function
-    mock_task = mocker.patch("src.background_tasks.run_feedback_processing")
-
+    mock_task = mocker.patch("api.background_tasks.run_feedback_processing")
+    
     payload = {
         "user_id": "test_user",
         "draft_message_id": "draft123",
@@ -46,14 +49,13 @@ def test_process_feedback(mocker):
     response = client.post("/process-feedback/", json=payload)
     assert response.status_code == 202
     assert response.json() == {"message": "Feedback processing started in the background"}
-    # Assert that the task was called once
     mock_task.assert_called_once()
 
-def test_reject_draft(mocker):
+@pytest.mark.asyncio
+async def test_reject_draft(mocker, client):
     # Mock the async delete_draft function
-    mock_delete = AsyncMock()
-    mocker.patch("src.app_services.delete_draft", mock_delete)
-
+    mock_delete = mocker.patch("api.app_services.delete_draft", new_callable=AsyncMock)
+    
     payload = {
         "user_id": "test_user",
         "draft_message_id": "draft123"
@@ -61,10 +63,10 @@ def test_reject_draft(mocker):
     response = client.post("/reject-draft/", json=payload)
     assert response.status_code == 200
     assert response.json() == {"message": "Draft rejected"}
-    # Assert that the async function was called
     mock_delete.assert_called_once()
 
-def test_get_draft_messages(mocker):
+@pytest.mark.asyncio
+async def test_get_draft_messages(mocker, client):
     # Mock the async get_all_drafts_for_user function to return test drafts
     mock_drafts = [
         {
@@ -80,25 +82,20 @@ def test_get_draft_messages(mocker):
     ]
     
     # Create a mock that can be awaited and returns the test drafts
-    mock_get_drafts = AsyncMock(return_value=[
+    mock_get_drafts = mocker.patch("api.app_services.get_all_drafts_for_user", new_callable=AsyncMock)
+    mock_get_drafts.return_value = [
         type('Draft', (), {
             'thread_name': d['thread_name'],
             'id': d['draft_message_id'],
             'msg_content': d['draft_message_content'],
-            'to_api_draft_message': lambda self=None: d
+            'to_api_draft_message': lambda self=d, d=d: d
         })()
         for d in mock_drafts
-    ])
-    mocker.patch("src.app_services.get_all_drafts_for_user", mock_get_drafts)
-
+    ]
+    
     response = client.get("/draft-messages/?user_id=test_user")
     assert response.status_code == 200
-    data = response.json()
-    assert "draft_messages" in data
-    assert isinstance(data["draft_messages"], list)
-    assert len(data["draft_messages"]) == 2
-    # Check structure of the first draft
-    draft = data["draft_messages"][0]
-    assert "thread_name" in draft
-    assert "draft_message_id" in draft
-    assert "draft_message_content" in draft 
+    response_data = response.json()
+    assert "draft_messages" in response_data
+    assert response_data["draft_messages"] == mock_drafts
+    mock_get_drafts.assert_called_once_with("test_user") 

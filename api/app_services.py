@@ -67,7 +67,7 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
         
         # Construct a rich, conversational prompt for the agent
         history_str = "\n".join([f"- {msg.sender_name}: {msg.msg_content}" for msg in thread_messages if msg.type == MessageType.MESSAGE])
-        system_prompt = open("src/prompts/process_thread_prompt.txt").read()
+        system_prompt = open("api/prompts/process_thread_prompt.txt").read()
         messages = [
             {
                 "role": "system", 

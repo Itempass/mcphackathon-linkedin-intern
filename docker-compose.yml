@@ -5,23 +5,51 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - MYSQL_DB=${MYSQL_DB}
+        - MYSQL_DATABASE=${MYSQL_DATABASE}
+        - SQLITE_DB_PATH=${SQLITE_DB_PATH}
+    env_file:
+      - .env
     ports:
-      - "3000:3000"
+      - "${CONTAINERPORT_AGENTLOGGERDASHBOARD:-3000}:${CONTAINERPORT_AGENTLOGGERDASHBOARD:-3000}"
+      - "${CONTAINERPORT_API:-8000}:${CONTAINERPORT_API:-8000}"
     environment:
-      - MYSQL_DB=${MYSQL_DB}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
       # The port for the database MCP server, used internally by the API proxy
-      - MCP_DB_SERVERPORT=8001
+      - MCP_DB_SERVERPORT=${MCP_DB_SERVERPORT}
       # The base URL for the backend, as seen from the container itself
-      - BACKEND_BASE_URL=http://localhost:8000
+      - BACKEND_BASE_URL=${BACKEND_BASE_URL}
+      - SQLITE_DB_PATH=${SQLITE_DB_PATH}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      bash -c "python mcp_servers/database_mcp_server/database_setup_script.py && 
+               /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${CONTAINERPORT_MYSQL:-3306}:3306"
     volumes:
-      - .:/app
-      - /app/node_modules
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   qdrant:
     image: qdrant/qdrant:latest
     restart: always
     ports:
-      - "6333:6333"
+      - "${CONTAINERPORT_QDRANT:-6333}:${CONTAINERPORT_QDRANT:-6333}"
       - "6334:6334"
     volumes:
-      - ./data:/qdrant/storage:z 
+      - ./data:/qdrant/storage:z
+
+volumes:
+  mysql_data: 

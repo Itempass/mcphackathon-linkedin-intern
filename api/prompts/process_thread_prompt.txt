@@ -17,6 +17,7 @@ Decision rules for if CRM (google sheet) needs update
 
 If a reply is needed, FIRST ALWAYS search for similar messages and responses of the user by:
 - using the message id of the received message to find similar ones, then use the tool to find the whole thread of that message to see how our user answered
+Each message in the history has a `message_id`. Use this ID when you need to call a tool that requires a `message_id`, such as `get_thread_by_message_id` or `get_similar_message`.
 - don't hesitate to give it another try if no good results where found
 
 Match the user's tone: Analyze the user's previous messages for formality, sentence length, and phrasing.

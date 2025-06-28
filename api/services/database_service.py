@@ -11,11 +11,12 @@ import hashlib
 import uuid
 from sqlalchemy.exc import IntegrityError
 import json
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
 from api.models.database_models import Base, Message, Agent, MessageType
+from shared.config import settings
 
 # Load environment variables
 load_dotenv()
@@ -24,35 +25,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # --- Database Configuration ---
-db_path = os.environ.get("SQLITE_DB_PATH")
-if not db_path:
-    raise ValueError("SQLITE_DB_PATH environment variable not set.")
-
-# The async SQLite driver uses a file path URI
-# The 'check_same_thread' is important for use with FastAPI/asyncio
+# The async MySQL driver uses a different connection string format
 engine = create_async_engine(
-    f"sqlite+aiosqlite:///{db_path}",
-    connect_args={"check_same_thread": False}
+    f"mysql+aiomysql://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DATABASE}",
+    pool_recycle=3600 # Recycle connections every hour
 )
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-# Enable WAL mode for SQLite for better concurrency.
-# This allows readers and a single writer to operate simultaneously.
-@event.listens_for(engine.sync_engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    """
-    Executes PRAGMA statements on each new connection to set up
-    WAL mode and a busy timeout. This is crucial for handling
-    concurrency in an async application with SQLite.
-    """
-    cursor = dbapi_connection.cursor()
-    try:
-        # Enable Write-Ahead Logging for better concurrency
-        cursor.execute("PRAGMA journal_mode=WAL")
-        # Set a busy timeout to wait for locks to be released
-        cursor.execute("PRAGMA busy_timeout = 5000")  # 5000ms = 5s
-    finally:
-        cursor.close()
 
 async def init_db():
     """Initializes the database and creates tables if they don't exist."""
@@ -143,6 +121,7 @@ async def upsert_agent(user_id: str, agent_id: str, messages_array: Optional[Lis
     """
     Insert or update an agent for a user (overwrites if exists)
     """
+    logger.info(f"Upserting agent {agent_id} for user {user_id}.")
     async with AsyncSessionLocal() as session:
         messages_json = json.dumps(messages_array) if messages_array else None
         
@@ -151,10 +130,12 @@ async def upsert_agent(user_id: str, agent_id: str, messages_array: Optional[Lis
         
         if existing_agent:
             # Update existing agent
+            logger.info(f"Agent {agent_id} found. Updating messages.")
             existing_agent.messages = messages_json
             agent = existing_agent
         else:
             # Create new agent
+            logger.info(f"Agent {agent_id} not found. Creating new agent record.")
             agent = Agent(
                 id=agent_id,
                 user_id=user_id,
@@ -164,6 +145,7 @@ async def upsert_agent(user_id: str, agent_id: str, messages_array: Optional[Lis
         
         await session.commit()
         await session.refresh(agent)
+        logger.info(f"Successfully committed agent {agent_id} to the database.")
         return agent
 
 async def add_message(
@@ -182,7 +164,7 @@ async def add_message(
     logger.debug(f"Adding message {message_id} for user {user_id}")
     
     async with AsyncSessionLocal() as session:
-        stmt = sqlite_insert(Message).values(
+        stmt = mysql_insert(Message).values(
             id=message_id,
             user_id=user_id,
             msg_content=msg_content,
@@ -194,9 +176,7 @@ async def add_message(
         )
         
         # This is the key change: specify the columns for the conflict
-        stmt = stmt.on_conflict_do_nothing(
-            index_elements=['id', 'user_id']
-        )
+        stmt = stmt.on_duplicate_key_update(id=stmt.inserted.id) # No-op on duplicate
 
         await session.execute(stmt)
         await session.commit()

@@ -13,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
 import hashlib
 import uuid
+import mysql.connector
 
 # Add project root to Python path to import shared models
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -23,57 +24,38 @@ from api.models.database_models import Base, Message, Agent, MessageType
 # Load environment variables
 load_dotenv(override=True)
 
-# Database configuration
-db_url = os.environ.get("MYSQL_DB")
-if not db_url:
-    raise ValueError("MYSQL_DB environment variable not set.")
+# --- Database Configuration ---
+db_user = os.getenv("MYSQL_USER")
+db_password = os.getenv("MYSQL_PASSWORD")
+db_host = os.getenv("MYSQL_HOST", "db")
+db_name = os.getenv("MYSQL_DATABASE")
 
-if db_url.startswith("mysql://"):
-    db_url = db_url.replace("mysql://", "mysql+aiomysql://", 1)
+if not all([db_user, db_password, db_host, db_name]):
+    raise ValueError("One or more MySQL environment variables are not set (MYSQL_USER, MYSQL_PASSWORD, MYSQL_HOST, MYSQL_DATABASE).")
+
+# The async MySQL driver uses a different connection string format
+db_url = f"mysql+aiomysql://{db_user}:{db_password}@{db_host}/{db_name}"
 
 engine = create_async_engine(db_url)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-async def drop_tables():
-    """Drop all existing database tables"""
-    print("Dropping existing database tables...")
-    async with engine.begin() as conn:
-        # Disable foreign key checks to allow dropping tables with constraints
-        await conn.execute(text("SET FOREIGN_KEY_CHECKS = 0"))
-        
-        # Get all table names and drop them
-        result = await conn.execute(text("SHOW TABLES"))
-        tables = result.fetchall()
-        
-        for (table_name,) in tables:
-            print(f"  Dropping table: {table_name}")
-            await conn.execute(text(f"DROP TABLE IF EXISTS `{table_name}`"))
-        
-        # Re-enable foreign key checks
-        await conn.execute(text("SET FOREIGN_KEY_CHECKS = 1"))
-        
-    print("✅ All existing tables wiped successfully")
-
 async def create_tables():
-    """Create all database tables"""
+    """Create all database tables if they don't already exist."""
     print("Creating database tables...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✅ Database tables created successfully")
+    print("✅ Database tables created successfully (if they didn't exist).")
 
 async def main():
     """Main setup function"""
     print("🚀 Starting database setup...")
     
     try:
-        await drop_tables()
         await create_tables()
         print("\n✅ Database setup completed successfully!")
-        print("  - MySQL database tables created")
         
     except Exception as e:
         print(f"\n❌ Error during database setup: {e}")
-        raise
     
     finally:
         await engine.dispose()

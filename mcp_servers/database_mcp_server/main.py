@@ -1,40 +1,31 @@
-import os
 import sys
 from typing import List, Optional, Dict, Any
-from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete, update, text, inspect
 from sqlalchemy.engine import Inspector
 import logging
 
+from shared.config import settings
+
 logger = logging.getLogger(__name__)
 
 # Add project root to Python path to import shared models
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, project_root)
+# This is no longer needed with PYTHONPATH set in supervisord
+# project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+# sys.path.insert(0, project_root)
 
 from fastmcp import FastMCP, Context
 from api.models.database_models import Base, Message, Agent, MessageType
 from api.services import qdrant_client
 
 # --- Configuration ---
-load_dotenv(override=True)
-db_path = os.environ.get("SQLITE_DB_PATH")
-if not db_path:
-    raise ValueError("SQLITE_DB_PATH environment variable not set.")
-
-# The async SQLite driver uses a file path URI
+# Use the same MySQL engine configuration as the rest of the application
 engine = create_async_engine(
-    f"sqlite+aiosqlite:///{db_path}",
-    connect_args={"check_same_thread": False}
+    f"mysql+aiomysql://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DATABASE}",
+    pool_recycle=3600 # Recycle connections every hour
 )
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-async def init_db():
-    """Initializes the database and creates tables if they don't exist."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 # --- FastMCP Application Setup ---
 mcp = FastMCP("Database MCP Server")
@@ -48,7 +39,8 @@ async def get_db_session():
 
 # --- Database Inspection Tools ---
 
-@mcp.tool(exclude_args=["user_id"])
+#@mcp.tool(exclude_args=["user_id"])
+# TODO: we didn't implement vector search yet, so this tool is not used.
 async def get_similar_message(
     user_id: str = None, 
     message_id: Optional[str] = None, 
@@ -120,6 +112,22 @@ async def get_similar_message(
     
     return results
 
+async def get_message(user_id: str, message_id: str) -> Optional[Message]:
+    """Retrieves a single message by its ID and user ID."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Message).where(Message.id == message_id, Message.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+async def get_all_messages_of_thread(user_id: str, thread_name: str) -> List[Message]:
+    """Retrieves all messages in a thread for a specific user."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Message).where(Message.user_id == user_id, Message.thread_name == thread_name)
+        )
+        return result.scalars().all()
+
 @mcp.tool(exclude_args=["user_id"])
 async def get_thread_by_message_id(message_id: str, user_id: str = None) -> List[Dict[str, Any]]:
     """
@@ -164,12 +172,8 @@ async def get_thread_by_message_id(message_id: str, user_id: str = None) -> List
 
 # --- Server Execution ---
 if __name__ == "__main__":
-    # Initialize the database before starting the server
-    import asyncio
-    asyncio.run(init_db())
-    
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("MCP_DB_SERVERPORT"))
+    host = "0.0.0.0"
+    port = settings.CONTAINERPORT_MCP
     
     print(f"🚀 Starting FastMCP Database Server on http://{host}:{port}/mcp")
     mcp.run(transport="streamable-http", host=host, port=port, path="/mcp") 

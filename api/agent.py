@@ -26,6 +26,8 @@ except ImportError:
 # OpenRouter integration using modern OpenAI client
 from openai import OpenAI
 
+from api.services import database_service
+
 
 load_dotenv(override=True)
 logger = logging.getLogger(__name__)
@@ -243,24 +245,18 @@ class GenericMCPAgent:
             # Fallback to simple heuristic
             return {"action": "call_tool", "tool": self.tools[0]["name"], "arguments": {}}
         
-        # Prepare the conversation for the LLM
-        llm_messages = [
-            {"role": "system", "content": "You are a helpful AI assistant."}
-        ]
-        llm_messages.extend(messages)
-        
-        logger.info(f"🤖 Getting LLM decision with {len(llm_messages)} messages and {len(self.tools)} tools...")
-        
-        # Get response from OpenRouter
+        # Default to a specific model if not provided
+        # model = "anthropic/claude-3-haiku"
+        model = "google/gemini-2.5-flash-preview-05-20:thinking"
+
         response = self.llm_client.chat.completions.create(
-            model=os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.7-sonnet:thinking"),
-            messages=llm_messages,
+            model=model,
+            messages=messages,
             tools=self._format_tools_for_llm(),
-            tool_choice="auto",
+            tool_choice="auto"
         )
-        
-        return response.choices[0].message
-    
+        return response.choices[0].message.model_dump()
+
     async def run_intelligent_agent(self, messages: List[Dict[str, Any]], max_iterations: int = 15) -> List[Dict[str, Any]]:
         """
         The main loop for the agent to process a conversation.
@@ -274,16 +270,16 @@ class GenericMCPAgent:
             assistant_response = await self._get_llm_decision(self.conversation_history)
             
             # If the model wants to call a tool
-            if assistant_response.tool_calls:
+            if assistant_response.get("tool_calls"):
                 # Add the assistant's response to history as a dictionary
-                self.conversation_history.append(assistant_response.model_dump())
+                self.conversation_history.append(assistant_response)
                 
                 # Execute all tool calls
-                for tool_call in assistant_response.tool_calls:
-                    tool_name = tool_call.function.name
+                for tool_call in assistant_response["tool_calls"]:
+                    tool_name = tool_call['function']['name']
                     
                     # Handle empty argument string from LLM
-                    arguments_str = tool_call.function.arguments
+                    arguments_str = tool_call['function']['arguments']
                     if not arguments_str:
                         arguments = {}
                     else:
@@ -292,7 +288,7 @@ class GenericMCPAgent:
                         except json.JSONDecodeError:
                             logger.error(f"Failed to decode arguments for tool {tool_name}: {arguments_str}")
                             tool_result_str = f"Error: Invalid JSON arguments for {tool_name}."
-                            self.conversation_history.append({"role": "tool", "tool_call_id": tool_call.id, "name": tool_name, "content": tool_result_str})
+                            self.conversation_history.append({"role": "tool", "tool_call_id": tool_call['id'], "name": tool_name, "content": tool_result_str})
                             continue
 
                     logger.info(f"Tool call: {tool_name}({arguments})")
@@ -308,7 +304,7 @@ class GenericMCPAgent:
                     # Add the tool result to the conversation history
                     self.conversation_history.append(
                         {
-                            "tool_call_id": tool_call.id,
+                            "tool_call_id": tool_call['id'],
                             "role": "tool",
                             "name": tool_name,
                             "content": tool_result,
@@ -319,7 +315,7 @@ class GenericMCPAgent:
             else:
                 logger.info("🤖 LLM provided a final answer.")
                 # Add the assistant's response to history as a dictionary
-                self.conversation_history.append(assistant_response.model_dump())
+                self.conversation_history.append(assistant_response)
                 return self.conversation_history
 
         logger.warning("Agent reached max iterations. Returning conversation history.")

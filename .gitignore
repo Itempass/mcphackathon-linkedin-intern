@@ -241,4 +241,8 @@ Thumbs.db
 .DS_Store
 
 # Created by Gemini
-.db_server.pid 
+.db_server.pid
+
+# Ignore data files
+/data/*
+!/data/.gitkeep 

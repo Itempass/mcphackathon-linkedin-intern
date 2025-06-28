@@ -12,7 +12,7 @@ import traceback
 from api.models import api_models
 from api.models.database_models import MessageType
 from api.models.internal_models import InternalMessage
-from api.services.sqlite_service import *
+from api.services.database_service import *
 from api.agent import run_intelligent_agent
 from fastmcp import Client
 
@@ -41,20 +41,20 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
         print(f"SERVICE: Deleting existing draft {draft.id} for thread {request.thread_name}.")
         await remove_message(request.user_id, draft.id)
 
-    # 3. Store the new messages
+    # 3. Store the new messages, with a final check to prevent race conditions
     for msg in new_api_messages:
-        timestamp = datetime.strptime(f"{msg.date} {msg.time}", "%Y-%m-%d %H:%M:%S")
-        message_id = msg.message_id
-        
-        await add_message(
-            user_id=request.user_id,
-            message_id=message_id,
-            message_type=MessageType.MESSAGE,
-            msg_content=msg.message_content,
-            thread_name=request.thread_name,
-            sender_name=msg.sender_name,
-            timestamp=timestamp
-        )
+        # Final check: has this message been added by another process in the meantime?
+        if not await get_message(request.user_id, msg.message_id):
+            timestamp = datetime.strptime(f"{msg.date} {msg.time}", "%Y-%m-%d %H:%M:%S")
+            await add_message(
+                user_id=request.user_id,
+                message_id=msg.message_id,
+                message_type=MessageType.MESSAGE,
+                msg_content=msg.message_content,
+                thread_name=request.thread_name,
+                sender_name=msg.sender_name,
+                timestamp=timestamp
+            )
     print("SERVICE: New messages stored.")
 
     # 4. Get updated thread history and generate new draft
@@ -66,7 +66,7 @@ async def process_thread_and_create_draft(request: api_models.APISendMessageRequ
         agent_id = str(uuid.uuid4())
         
         # Construct a rich, conversational prompt for the agent
-        history_str = "\n".join([f"- {msg.sender_name}: {msg.msg_content}" for msg in thread_messages if msg.type == MessageType.MESSAGE])
+        history_str = "\n".join([f"- {msg.sender_name} (message_id: {msg.id}): {msg.msg_content}" for msg in thread_messages if msg.type == MessageType.MESSAGE])
         system_prompt = open("api/prompts/process_thread_prompt.txt").read()
         messages = [
             {
@@ -93,6 +93,10 @@ Analyze the conversation and suggest a suitable draft."""
             messages=messages
         )
 
+        # Save the agent's full conversation history
+        logger.info(f"Agent run {agent_id} finished. Saving conversation with {len(conversation_history)} messages.")
+        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+
         # Extract draft from the agent's final action by checking for a specific tool call
         draft_content = None
         if conversation_history:
@@ -108,10 +112,11 @@ Analyze the conversation and suggest a suitable draft."""
                         except (json.JSONDecodeError, AttributeError):
                             print("SERVICE: Could not parse draft from tool call arguments.")
 
-        # Save the agent information with conversation history, regardless of draft creation
-        print(f"SERVICE: Attempting to save agent {agent_id} with conversation history.")
-        await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
-        print(f"SERVICE: Successfully saved agent {agent_id}.")
+        # The agent run is already saved within the `run_intelligent_agent` function.
+        # No need to save it again here.
+        # print(f"SERVICE: Attempting to save agent {agent_id} with conversation history.")
+        # await upsert_agent(request.user_id, agent_id, messages_array=conversation_history)
+        # print(f"SERVICE: Successfully saved agent {agent_id}.")
 
         # Only store a draft if one was successfully created by the agent
         if draft_content:

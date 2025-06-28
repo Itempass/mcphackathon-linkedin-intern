@@ -1,0 +1,16 @@
+# Git
+.git
+.gitignore
+
+# Python
+.venv
+__pycache__/
+
+# Node
+**/node_modules
+
+# IDE
+.vscode
+
+# Env
+.env 

@@ -5,9 +5,8 @@ import httpx
 import uuid
 
 from qdrant_client import QdrantClient, models
-from qdrant_client.http.models import PointStruct
 from shared.config import settings
-from shared.services.embedding_service import get_embedding
+from api.services.embedding_service import get_embedding
 
 logger = logging.getLogger(__name__)
 

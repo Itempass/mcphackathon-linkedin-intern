@@ -15,7 +15,7 @@ services:
     environment:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       # The port for the database MCP server, used internally by the API proxy
-      - MCP_DB_SERVERPORT=${MCP_DB_SERVERPORT}
+      - CONTAINERPORT_MCP=${CONTAINERPORT_MCP}
       # The base URL for the backend, as seen from the container itself
       - BACKEND_BASE_URL=${BACKEND_BASE_URL}
       - SQLITE_DB_PATH=${SQLITE_DB_PATH}

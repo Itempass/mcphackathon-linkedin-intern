@@ -53,13 +53,13 @@ This approach allows SQLAlchemy to understand our full database schema, includin
 
 This is the heart of the MCP server. It will be responsible for orchestrating all the different components to run a standalone web server, heavily inspired by robust application lifecycle patterns.
 
-1.  **Environment Loading**: It will start by using `python-dotenv` to load environment variables from the root `.env` file. This includes the `MYSQL_DB` connection string and the `MCP_DB_SERVERPORT` for the server to listen on.
+1.  **Environment Loading**: It will start by using `python-dotenv` to load environment variables from the root `.env` file. This includes the `MYSQL_DB` connection string and the `CONTAINERPORT_MCP` for the server to listen on.
 2.  **Lifespan Management**: We will implement a dedicated `lifespan` async context manager.
     -   **On Startup**: This manager will create an `async_engine` using SQLAlchemy's `create_async_engine` function and the MySQL connection string. It will then yield a dictionary containing this engine, making it available to the application as shared context.
     -   **On Shutdown**: The `finally` block of the manager will ensure the engine's resources are properly disposed of.
 3.  **Application Initialization**: It will create an instance of the `EnrichMCP` application, passing the `lifespan` manager to its `lifespan` parameter.
 4.  **Automatic Model Integration**: The most critical step will be to use the `include_sqlalchemy_models(app, Base)` function. This function will inspect all model classes in `models.py` that inherit from our `Base` and automatically generate the entire MCP API. It will create `get`, `list`, and `search` resources for each model and automatically create the resolvers for any defined `relationships`. This saves a significant amount of boilerplate code.
-5.  **Runnable Server**: Finally, it will include the necessary code to run the application using `uvicorn`. The server will be configured to run on the host `0.0.0.0` and the port specified by the `MCP_DB_SERVERPORT` variable (defaulting to `8001`).
+5.  **Runnable Server**: Finally, it will include the necessary code to run the application using `uvicorn`. The server will be configured to run on the host `0.0.0.0` and the port specified by the `CONTAINERPORT_MCP` variable (defaulting to `8001`).
 
 ### `README.md` - Instructions
 

@@ -277,7 +277,7 @@ async def get_thread_by_message_id(message_id: str, user_id: str = None) -> List
 # --- Server Execution ---
 if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("MCP_DB_SERVERPORT"))
+    port = int(os.environ.get("CONTAINERPORT_MCP"))
     
     print(f"🚀 Starting FastMCP Database Server on http://{host}:{port}/mcp")
     mcp.run(transport="streamable-http", host=host, port=port, path="/mcp") 

@@ -1,4 +1,4 @@
-# LinkedIn AI Assistant
+# FeatureForm's MCP Hackathon - LinkedIn AI Assistant
 
 This project was created for a hackathon. As such, it's more of a proof-of-concept than a fully functional application. We're proud to have won third place!
 
@@ -11,7 +11,7 @@ At a high level, this project is a browser plugin that assists users in respondi
 - The backend uses an AI model to generate a draft reply.
 - The draft reply is then displayed to the user in the plugin.
 
-**note**: The original goal was to implement a vector db so we could do semantic search on old LinkedIn messages to reply in a similar way (eg. you already answered that question in another chat -> the Agent would find it and reply in the same way). I unfortunately broke this implementation during refactoring, so I removed it for now.
+**note on Vector DB & Semantic Search**: The original goal was to implement a vector db so we could do semantic search on old LinkedIn messages to reply in a similar way (eg. you already answered that question in another chat -> the Agent would find it and reply in the same way). I unfortunately broke this implementation during refactoring, so I removed it for now.
 
 ## Project Structure
 
@@ -27,4 +27,7 @@ The project is a monorepo containing several components:
 - `tests/`: Contains small test scripts for the backend API and services, not fully automated tests.
 - `Dockerfile`, `docker-compose.yml`: Files for building and running the application using Docker.
 - `supervisord.conf`: Configuration for process management.
+
+## Installation
+
 

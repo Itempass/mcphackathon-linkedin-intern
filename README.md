@@ -43,7 +43,6 @@ The project is a monorepo containing several components:
 - Change `OPENROUTER_API_KEY` to your key. **Important:** navigate with your arrow keys.
 - Use `ctrl + x` to save your changes
 
-**im
 **note**: `OPENAI_API_KEY` is not actually being used, so you can leave the placeholder value.
 
 ### 3. Build plugin

@@ -46,25 +46,26 @@ The project is a monorepo containing several components:
 **im
 **note**: `OPENAI_API_KEY` is not actually being used, so you can leave the placeholder value.
 
-### 3. Build the project and start the backend
+### 3. Build plugin
+- navigate to the `plugin` directory (`cd plugin` in your current terminal)
+- install frontend stuff using `npm install`
+- build frontend using `npm run build`
+- this will output the plugin code into the `plugin/dist` directory
+
+### 4. Build the project and start the backend
+- navigate up one level back into the root of the project using `cd ..`
 - in the same directory, type `docker-compose up` to start building
 
 **note:** make sure that you have Docker installed! If you haven't, read [the installation guide](https://docs.docker.com/engine/install/).
 
 
-### 4. Build plugin
-- navigate to the `plugin` directory (`cd plugin` in your current terminal)
-- install frontend stuff using `npm install`
-- build frontend using `npm run build`
-- this will output the plugin code into the `plugin/dist` directory
+### 5. Try out the plugin
 - now navigate in Chrome to `chrome://extensions/`
 - enable Developer Mode (top right)
 - Click Load Unpacked (top left)
 - Select the `plugin/dist` folder
-
-### 5. Try out the plugin
 - open the plugin in Chrome by clicking the plugin icon
-- refresh LinkedIn
+- refresh LinkedIn (**after** you have opened the plugin sidebar -> yep still buggy ;))
 - hire 'Alex' as an intern and follow his instructions
 
 **note:** in the UI, you will see 3 'interns' you can choose from. Only Alex works. It was a hackathon, creating buttons that don't actually do anything is part of it ;) 

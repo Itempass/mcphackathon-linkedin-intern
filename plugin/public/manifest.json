@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "CRXJS React Vite App",
+  "name": "MCP Hackathon - LinkedIn Intern",
   "description": "A Chrome extension with a side panel, built with Vite, React, and TypeScript.",
   "version": "0.0.1",
   "action": {
@@ -12,7 +12,7 @@
     "storage"
   ],
   "host_permissions": [
-    "https://mcphackathon.cloud1.itempasshomelab.org/*"
+    "*"
   ],
   "content_scripts": [
     {

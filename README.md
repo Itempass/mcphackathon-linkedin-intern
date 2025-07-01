@@ -67,6 +67,7 @@ The project is a monorepo containing several components:
 - open the plugin in Chrome by clicking the plugin icon
 - refresh LinkedIn (**after** you have opened the plugin sidebar -> yep still buggy ;))
 - hire 'Alex' as an intern and follow his instructions
+- **VERY IMPORTANT:**: the plugin only works for messages opened through the message interface at the top of LinkedIn. It does not work for messages that are overlaid on your timeline. 
 
 **note:** in the UI, you will see 3 'interns' you can choose from. Only Alex works. It was a hackathon, creating buttons that don't actually do anything is part of it ;) 
 **note:** the AI is pretty slow atm, it can take a minute untill drafts start appearing.

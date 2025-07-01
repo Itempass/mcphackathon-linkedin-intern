@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
       react(),
       crx({ manifest }),
     ],
+    define: {
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL),
+    },
     
     // Build optimizations
     build: {

@@ -29,30 +29,43 @@ The project is a monorepo containing several components:
 - `supervisord.conf`: Configuration for process management.
 
 ## Installation
-### 1. Set Environment Variables
-- Rename `.env.example` to `.env`
-- Change `OPENROUTER_API_KEY` and `OPENAI_API_KEY` to your keys
 
-**note**: `OPENAI_API_KEY` is not actually being used, but is still required by the code to start up. This was part of the semantic search logic (see note in [What it does](#what-it-does)).
+### 1. Clone the repository
+- Copy the repository url (`https://github.com/Itempass/mcphackathon-linkedin-intern.git`)
+- Go to your terminal
+- Navigate to the folder where you want to clone the project (eg. `cd Downloads` or `cd Documents`)
+- Type `git clone https://github.com/Itempass/mcphackathon-linkedin-intern.git`
 
-### 2. Build plugin
-- navigate to `plugin` directory (`cd plugin`)
-- install frontend stuff `npm install`
-- build frontend `npm run build`
+### 2. Set Environment Variables
+- Navigate into the directory you just cloned using `cd mcphackathon-linkedin-intern`
+- Rename `.env.example` to `.env` (on Mac: `cp .env.example .env` | on Windows: `copy .env.example .env`)
+- Open the `.env` file to edit using `nano .env`
+- Change `OPENROUTER_API_KEY` to your key. **Important:** navigate with your arrow keys.
+- Use `ctrl + x` to save your changes
+
+**im
+**note**: `OPENAI_API_KEY` is not actually being used, so you can leave the placeholder value.
+
+### 3. Build the project and start the backend
+- in the same directory, type `docker-compose up` to start building
+
+**note:** make sure that you have Docker installed! If you haven't, read [the installation guide](https://docs.docker.com/engine/install/).
+
+
+### 4. Build plugin
+- navigate to the `plugin` directory (`cd plugin` in your current terminal)
+- install frontend stuff using `npm install`
+- build frontend using `npm run build`
 - this will output the plugin code into the `plugin/dist` directory
 - now navigate in Chrome to `chrome://extensions/`
 - enable Developer Mode (top right)
 - Click Load Unpacked (top left)
-- Select the `dist` folder
+- Select the `plugin/dist` folder
 
-### 3. Start backend
-- navigate to the root directory of this project
-- `docker-compose up`
-
-**note** make sure that you have Docker installed!
-
-### 4. Try out the plugin
+### 5. Try out the plugin
 - open the plugin in Chrome by clicking the plugin icon
 - refresh LinkedIn
+- hire 'Alex' as an intern and follow his instructions
 
-**note** in the UI, you will see 3 'interns' you can choose from. Only Alex works. It was a hackathon, creating buttons that don't actually do anything is part of it ;) 
+**note:** in the UI, you will see 3 'interns' you can choose from. Only Alex works. It was a hackathon, creating buttons that don't actually do anything is part of it ;) 
+**note:** the AI is pretty slow atm, it can take a minute untill drafts start appearing.
